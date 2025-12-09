@@ -2180,27 +2180,33 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         )    
 
 
-        # store strengths & damage evolution parameters as buffers
-        self.register_buffer("Xt", torch.as_tensor(Xt, dtype=self.C0.dtype, device=self.C0.device))
-        self.register_buffer("Xc", torch.as_tensor(Xc, dtype=self.C0.dtype, device=self.C0.device))
-        self.register_buffer("Yt", torch.as_tensor(Yt, dtype=self.C0.dtype, device=self.C0.device))
-        self.register_buffer("Yc", torch.as_tensor(Yc, dtype=self.C0.dtype, device=self.C0.device))
-        self.register_buffer("S12", torch.as_tensor(S12, dtype=self.C0.dtype, device=self.C0.device))
+            # store strengths & damage evolution parameters as tensors
+        self.Xt = torch.as_tensor(Xt, dtype=self.C0.dtype, device=self.C0.device)
+        self.Xc = torch.as_tensor(Xc, dtype=self.C0.dtype, device=self.C0.device)
+        self.Yt = torch.as_tensor(Yt, dtype=self.C0.dtype, device=self.C0.device)
+        self.Yc = torch.as_tensor(Yc, dtype=self.C0.dtype, device=self.C0.device)
+        self.S12 = torch.as_tensor(S12, dtype=self.C0.dtype, device=self.C0.device)
 
         if S13 is None:
             S13 = S12
         if S23 is None:
             S23 = S12
 
-        self.register_buffer("S13", torch.as_tensor(S13, dtype=self.C0.dtype, device=self.C0.device))
-        self.register_buffer("S23", torch.as_tensor(S23, dtype=self.C0.dtype, device=self.C0.device))
+        self.S13 = torch.as_tensor(S13, dtype=self.C0.dtype, device=self.C0.device)
+        self.S23 = torch.as_tensor(S23, dtype=self.C0.dtype, device=self.C0.device)
 
         # fracture energies and characteristic length
-        self.register_buffer("G_ft", torch.as_tensor(G_ft if G_ft is not None else 1.0, dtype=self.C0.dtype, device=self.C0.device))
-        self.register_buffer("G_fc", torch.as_tensor(G_fc if G_fc is not None else 1.0, dtype=self.C0.dtype, device=self.C0.device))
-        self.register_buffer("G_mt", torch.as_tensor(G_mt if G_mt is not None else 1.0, dtype=self.C0.dtype, device=self.C0.device))
-        self.register_buffer("G_mc", torch.as_tensor(G_mc if G_mc is not None else 1.0, dtype=self.C0.dtype, device=self.C0.device))
-        self.register_buffer("lc",   torch.as_tensor(lc  if lc  is not None else 1.0, dtype=self.C0.dtype, device=self.C0.device))
+        self.G_ft = torch.as_tensor(G_ft if G_ft is not None else 1.0,
+                                    dtype=self.C0.dtype, device=self.C0.device)
+        self.G_fc = torch.as_tensor(G_fc if G_fc is not None else 1.0,
+                                    dtype=self.C0.dtype, device=self.C0.device)
+        self.G_mt = torch.as_tensor(G_mt if G_mt is not None else 1.0,
+                                    dtype=self.C0.dtype, device=self.C0.device)
+        self.G_mc = torch.as_tensor(G_mc if G_mc is not None else 1.0,
+                                    dtype=self.C0.dtype, device=self.C0.device)
+        self.lc   = torch.as_tensor(lc  if lc  is not None else 1.0,
+                                    dtype=self.C0.dtype, device=self.C0.device)
+
        
     def vectorize(self, n_elem: int):
         """
