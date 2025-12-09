@@ -2211,7 +2211,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
 
 
        
-    def vectorize(self, n_elem: int):
+        def vectorize(self, n_elem: int):
         """
         Returns a vectorized copy of the material for `n_elem` elements.
 
@@ -2225,22 +2225,22 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
 
         # Helper function to broadcast scalars/tensors to shape (n_elem,)
         def broadcast(x):
-            t = torch.as_tensor(x, dtype=self.C0.dtype, device=self.C0.device)
+            t = torch.as_tensor(x, dtype=self.E_1.dtype, device=self.E_1.device)
             if t.ndim == 0:
                 return t.repeat(n_elem)
             return t
 
         # Create a new vectorized material instance
         mat = AnisotropicDamage3D(
-            E1=broadcast(self.E1),
-            E2=broadcast(self.E2),
-            E3=broadcast(self.E3),
-            G12=broadcast(self.G12),
-            G13=broadcast(self.G13),
-            G23=broadcast(self.G23),
-            nu12=broadcast(self.nu12),
-            nu13=broadcast(self.nu13),
-            nu23=broadcast(self.nu23),
+            E1=broadcast(self.E_1),
+            E2=broadcast(self.E_2),
+            E3=broadcast(self.E_3),
+            G12=broadcast(self.G_12),
+            G13=broadcast(self.G_13),
+            G23=broadcast(self.G_23),
+            nu12=broadcast(self.nu_12),
+            nu13=broadcast(self.nu_13),
+            nu23=broadcast(self.nu_23),
             rho=broadcast(self.rho),
 
             Xt=broadcast(self.Xt),
@@ -2261,6 +2261,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
 
         mat.is_vectorized = True
         return mat
+
     def step(
         self,
         H_inc: torch.Tensor,
