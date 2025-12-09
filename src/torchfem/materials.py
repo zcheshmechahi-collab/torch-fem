@@ -2296,8 +2296,8 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
 
         state_new = state.clone()
 
-        # 3) effective (undamaged) stress: sigma_hat = C0 : (eps_new - de0)
-        sigma_hat = torch.einsum("...ijkl,...kl->...ij", self.C0, eps_new - de0)
+        # 3) effective (undamaged) stress: sigma_hat = C : (eps_new - de0)
+        sigma_hat = torch.einsum("...ijkl,...kl->...ij", self.C, eps_new - de0)
 
         # 4) Hashin initiation functions (placeholders)
         f_ft = self.hashin_ft(sigma_hat)
@@ -2412,11 +2412,11 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
     ) -> torch.Tensor:
         """
         Build anisotropically damaged stiffness tensor C_d(d_f, d_m, d_s)
-        from the undamaged C0.
+        from the undamaged C.
 
         For the first version, you can even start with
         an isotropic-like combination and refine later.
         """
         # TODO: implement real MLT degradation.
-        # For now: no damage (just C0) so that code runs.
-        return self.C0
+        # For now: no damage (just C) so that code runs.
+        return self.C
