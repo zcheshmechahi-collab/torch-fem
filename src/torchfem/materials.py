@@ -2165,14 +2165,20 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         device=None,
         dtype=None,
     ):
+        
         super().__init__(
-            E1=E1, E2=E2, E3=E3,
-            G12=G12, G13=G13, G23=G23,
-            nu12=nu12, nu13=nu13, nu23=nu23,
+            E_1=E1,
+            E_2=E2,
+            E_3=E3,
+            nu_12=nu12,
+            nu_13=nu13,
+            nu_23=nu23,
+            G_12=G12,
+            G_13=G13,
+            G_23=G23,
             rho=rho,
-            device=device,
-            dtype=dtype,
-        )
+        )    
+
 
         # store strengths & damage evolution parameters as buffers
         self.register_buffer("Xt", torch.as_tensor(Xt, dtype=self.C0.dtype, device=self.C0.device))
