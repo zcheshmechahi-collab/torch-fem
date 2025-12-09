@@ -2211,7 +2211,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
 
 
        
-        def vectorize(self, n_elem: int):
+    def vectorize(self, n_elem: int):
         """
         Returns a vectorized copy of the material for `n_elem` elements.
 
@@ -2220,47 +2220,48 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         the function simply returns `self` without modification.
         """
 
-            if getattr(self, "is_vectorized", False):
-                return self
-    
-            # Helper function to broadcast scalars/tensors to shape (n_elem,)
-            def broadcast(x):
-                t = torch.as_tensor(x, dtype=self.E_1.dtype, device=self.E_1.device)
-                if t.ndim == 0:
-                    return t.repeat(n_elem)
-                return t
+        if getattr(self, "is_vectorized", False):
+            return self
 
-            # Create a new vectorized material instance
-            mat = AnisotropicDamage3D(
-                E1=broadcast(self.E_1),
-                E2=broadcast(self.E_2),
-                E3=broadcast(self.E_3),
-                G12=broadcast(self.G_12),
-                G13=broadcast(self.G_13),
-                G23=broadcast(self.G_23),
-                nu12=broadcast(self.nu_12),
-                nu13=broadcast(self.nu_13),
-                nu23=broadcast(self.nu_23),
-                rho=broadcast(self.rho),
+        # Helper function to broadcast scalars/tensors to shape (n_elem,)
+        def broadcast(x):
+            t = torch.as_tensor(x, dtype=self.E_1.dtype, device=self.E_1.device)
+            if t.ndim == 0:
+                return t.repeat(n_elem)
+            return t
 
-                Xt=broadcast(self.Xt),
-                Xc=broadcast(self.Xc),
-                Yt=broadcast(self.Yt),
-                Yc=broadcast(self.Yc),
-                S12=broadcast(self.S12),
-                S13=broadcast(self.S13),
-                S23=broadcast(self.S23),
+        # Create a new vectorized material instance
+        mat = AnisotropicDamage3D(
+            E1=broadcast(self.E_1),
+            E2=broadcast(self.E_2),
+            E3=broadcast(self.E_3),
+            G12=broadcast(self.G_12),
+            G13=broadcast(self.G_13),
+            G23=broadcast(self.G_23),
+            nu12=broadcast(self.nu_12),
+            nu13=broadcast(self.nu_13),
+            nu23=broadcast(self.nu_23),
+            rho=broadcast(self.rho),
 
-                G_ft=broadcast(self.G_ft),
-                G_fc=broadcast(self.G_fc),
-                G_mt=broadcast(self.G_mt),
-                G_mc=broadcast(self.G_mc),
+            Xt=broadcast(self.Xt),
+            Xc=broadcast(self.Xc),
+            Yt=broadcast(self.Yt),
+            Yc=broadcast(self.Yc),
+            S12=broadcast(self.S12),
+            S13=broadcast(self.S13),
+            S23=broadcast(self.S23),
 
-                lc=broadcast(self.lc),
-            )
+            G_ft=broadcast(self.G_ft),
+            G_fc=broadcast(self.G_fc),
+            G_mt=broadcast(self.G_mt),
+            G_mc=broadcast(self.G_mc),
 
-            mat.is_vectorized = True
-            return mat
+            lc=broadcast(self.lc),
+        )
+
+        mat.is_vectorized = True
+        return mat
+
 
     def step(
         self,
