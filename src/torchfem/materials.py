@@ -2123,3 +2123,76 @@ class OrthotropicConductivity2D(IsotropicConductivity2D):
         # compute rotated conductivity tensor
         self.KAPPA = torch.einsum("...ik, ...jl, ...kl -> ...ij", R, R, self.KAPPA)
         return self
+
+
+class AnisotropicDamage3D(OrthotropicElasticity3D):
+    """
+    Anisotropic damage model for UD composites (Hashin + MLT + Abaqus-like).
+
+    - Inherits undamaged orthotropic stiffness C0 from OrthotropicElasticity3D
+    - Adds damage state variables and step() update like IsotropicDamage3D
+    """
+
+    name = "anisotropic_damage_3d"
+    n_state = 8  # [δ_ft_max, δ_fc_max, δ_mt_max, δ_mc_max, d_ft, d_fc, d_mt, d_mc]
+
+    def __init__(
+        self,
+        E1,
+        E2,
+        E3,
+        G12,
+        G13,
+        G23,
+        nu12,
+        nu13,
+        nu23,
+        rho,
+        # Hashin strength parameters
+        Xt,  # fiber tension strength
+        Xc,  # fiber compression strength
+        Yt,  # matrix tension strength
+        Yc,  # matrix compression strength
+        S12, # in-plane shear strength
+        S13=None,  # optional out-of-plane
+        S23=None,
+        # damage evolution params (Abaqus-style)
+        G_ft=None,
+        G_fc=None,
+        G_mt=None,
+        G_mc=None,
+        lc=None,
+        device=None,
+        dtype=None,
+    ):
+        super().__init__(
+            E1=E1, E2=E2, E3=E3,
+            G12=G12, G13=G13, G23=G23,
+            nu12=nu12, nu13=nu13, nu23=nu23,
+            rho=rho,
+            device=device,
+            dtype=dtype,
+        )
+
+        # store strengths & damage evolution parameters as buffers
+        self.register_buffer("Xt", torch.as_tensor(Xt, dtype=self.C0.dtype, device=self.C0.device))
+        self.register_buffer("Xc", torch.as_tensor(Xc, dtype=self.C0.dtype, device=self.C0.device))
+        self.register_buffer("Yt", torch.as_tensor(Yt, dtype=self.C0.dtype, device=self.C0.device))
+        self.register_buffer("Yc", torch.as_tensor(Yc, dtype=self.C0.dtype, device=self.C0.device))
+        self.register_buffer("S12", torch.as_tensor(S12, dtype=self.C0.dtype, device=self.C0.device))
+
+        if S13 is None:
+            S13 = S12
+        if S23 is None:
+            S23 = S12
+
+        self.register_buffer("S13", torch.as_tensor(S13, dtype=self.C0.dtype, device=self.C0.device))
+        self.register_buffer("S23", torch.as_tensor(S23, dtype=self.C0.dtype, device=self.C0.device))
+
+        # fracture energies and characteristic length
+        self.register_buffer("G_ft", torch.as_tensor(G_ft if G_ft is not None else 1.0, dtype=self.C0.dtype, device=self.C0.device))
+        self.register_buffer("G_fc", torch.as_tensor(G_fc if G_fc is not None else 1.0, dtype=self.C0.dtype, device=self.C0.device))
+        self.register_buffer("G_mt", torch.as_tensor(G_mt if G_mt is not None else 1.0, dtype=self.C0.dtype, device=self.C0.device))
+        self.register_buffer("G_mc", torch.as_tensor(G_mc if G_mc is not None else 1.0, dtype=self.C0.dtype, device=self.C0.device))
+        self.register_buffer("lc",   torch.as_tensor(lc  if lc  is not None else 1.0, dtype=self.C0.dtype, device=self.C0.device))
+
