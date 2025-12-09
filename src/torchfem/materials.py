@@ -2282,7 +2282,15 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         # 1) total small strain eps_new (same pattern as IsotropicDamage3D)
         H_new = (F - torch.eye(H_inc.shape[-1], device=H_inc.device, dtype=H_inc.dtype)) + H_inc
         eps_new = 0.5 * (H_new.transpose(-1, -2) + H_new)
-
+        # ------------------------------------------------------------
+        # Short-circuit: pure elastic behavior if no state variables
+        # ------------------------------------------------------------
+        if state.shape[-1] == 0:
+            sigma_new = torch.einsum("...ijkl,...kl->...ij", self.C, eps_new - de0)
+            ddsdde = self.C
+            return sigma_new, state, ddsdde
+    
+        # ------------------------------------------------------------
         # 2) unpack state
         delta_ft_max = state[..., 0]
         delta_fc_max = state[..., 1]
