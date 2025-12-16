@@ -2226,7 +2226,6 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         self.G_fc = torch.as_tensor(G_fc if G_fc is not None else 1.0)
         self.G_mt = torch.as_tensor(G_mt if G_mt is not None else 1.0)
         self.G_mc = torch.as_tensor(G_mc if G_mc is not None else 1.0)
-        self.lc = torch.as_tensor(lc if lc is not None else 1.0)
 
         # [δ_ft_max, δ_fc_max, δ_mt_max, δ_mc_max, d_ft, d_fc, d_mt, d_mc]
         self.n_state = 8
@@ -2276,7 +2275,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
             G_mt=broadcast(self.G_mt),
             G_mc=broadcast(self.G_mc),
 
-            lc=broadcast(self.lc),
+
         )
 
         mat.is_vectorized = True
