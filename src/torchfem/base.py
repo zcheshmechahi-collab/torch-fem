@@ -191,16 +191,20 @@ class FEM(ABC):
         for idx, k_chunk in zip(torch.chunk(self.idx, chunks), torch.chunk(k, chunks)):
             # Ravel indices and values
             chunk_size = idx.shape[0]
-            col = idx.unsqueeze(1).expand(chunk_size, self.idx.shape[1], -1).ravel()
-            row = idx.unsqueeze(-1).expand(chunk_size, -1, self.idx.shape[1]).ravel()
+            col = idx.unsqueeze(1).expand(
+                chunk_size, self.idx.shape[1], -1).ravel()
+            row = idx.unsqueeze(-1).expand(chunk_size, -1,
+                                           self.idx.shape[1]).ravel()
             indices = torch.stack([row, col], dim=0)
             values = k_chunk.ravel()
 
             # Eliminate and replace constrained dofs
             ci = torch.isin(idx, con)
-            mask_col = ci.unsqueeze(1).expand(chunk_size, self.idx.shape[1], -1).ravel()
+            mask_col = ci.unsqueeze(1).expand(
+                chunk_size, self.idx.shape[1], -1).ravel()
             mask_row = (
-                ci.unsqueeze(-1).expand(chunk_size, -1, self.idx.shape[1]).ravel()
+                ci.unsqueeze(-1).expand(chunk_size, -1,
+                                        self.idx.shape[1]).ravel()
             )
             mask = ~(mask_col | mask_row)
             diag_index = torch.stack((con, con), dim=0)
@@ -296,6 +300,7 @@ class FEM(ABC):
         for n in range(1, N):
             # Increment size
             inc = increments[n] - increments[n - 1]
+            self.material._dl = float(inc)
 
             # Load increment
             F_ext = increments[n] * self._neumann.ravel()
@@ -336,7 +341,8 @@ class FEM(ABC):
                     break
 
                 if torch.isnan(res_norm) or torch.isinf(res_norm):
-                    raise Exception("Newton-Raphson iteration did not converge")
+                    raise Exception(
+                        "Newton-Raphson iteration did not converge")
 
                 # Use cached solve from previous iteration if available
                 if i == 0 and use_cached_solve:
@@ -361,6 +367,8 @@ class FEM(ABC):
                 )
 
             if res_norm > rtol * res_norm0 and res_norm > atol:
+                print(
+                    f"FAILED at increment n={n}, i={i}, factor={float(increments[n]):.6f}, inc={float(inc):.3e}, res={float(res_norm):.3e}")
                 raise Exception("Newton-Raphson iteration did not converge.")
 
             # Update increment
@@ -414,7 +422,8 @@ class Mechanics(FEM, ABC):
     @displacements.setter
     def displacements(self, value: Tensor):
         if not value.shape == (self.n_nod, self.n_dof_per_node):
-            raise ValueError("Displacements must have the same shape as nodes.")
+            raise ValueError(
+                "Displacements must have the same shape as nodes.")
         if not torch.is_floating_point(value):
             raise TypeError("Displacements must be a floating-point tensor.")
         self._dirichlet = value.to(self.nodes.device)
@@ -426,7 +435,8 @@ class Mechanics(FEM, ABC):
     @ext_strain.setter
     def ext_strain(self, value: Tensor):
         if not value.shape == (self.n_nod, self.n_dof_per_node, self.n_dim):
-            raise ValueError("External strain must have the same shape as strains.")
+            raise ValueError(
+                "External strain must have the same shape as strains.")
         if not torch.is_floating_point(value):
             raise TypeError("External strain must be a floating-point tensor.")
         self._external_gradient = value.to(self.nodes.device)
@@ -441,7 +451,8 @@ class Mechanics(FEM, ABC):
         du = torch.zeros(self.n_nod, self.n_dof_per_node)
         de0 = torch.zeros(self.n_elem, *self.n_flux)
         self.K = torch.empty(0)
-        k, _ = self.integrate_material(u, grad, flux, state, 1, 0, du, de0, False)
+        k, _ = self.integrate_material(
+            u, grad, flux, state, 1, 0, du, de0, False)
         return k
 
     def integrate_material(
@@ -512,7 +523,8 @@ class Mechanics(FEM, ABC):
             # Compute element stiffness matrix
             if self.K.numel() == 0 or not self.material.n_state == 0 or nlgeom:
                 # Material stiffness
-                BCB = torch.einsum("...ijpq,...qk,...il->...ljkp", ddsdde, B, B)
+                BCB = torch.einsum(
+                    "...ijpq,...qk,...il->...ljkp", ddsdde, B, B)
                 BCB = BCB.reshape(
                     -1, self.n_dof_per_node * N_nod, self.n_dof_per_node * N_nod
                 )
@@ -523,10 +535,12 @@ class Mechanics(FEM, ABC):
                     "...iq,...qk,...il->...lk", stress[n, i].clone(), B, B
                 )
                 zeros = torch.zeros_like(BSB)
-                kg = torch.stack([BSB] + (self.n_dof_per_node - 1) * [zeros], dim=-1)
+                kg = torch.stack(
+                    [BSB] + (self.n_dof_per_node - 1) * [zeros], dim=-1)
                 kg = kg.reshape(-1, N_nod, self.n_dim * N_nod).unsqueeze(-2)
                 zeros = torch.zeros_like(kg)
-                kg = torch.stack([kg] + (self.n_dof_per_node - 1) * [zeros], dim=-2)
+                kg = torch.stack(
+                    [kg] + (self.n_dof_per_node - 1) * [zeros], dim=-2)
                 kg = kg.reshape(
                     -1, self.n_dof_per_node * N_nod, self.n_dof_per_node * N_nod
                 )
@@ -588,7 +602,8 @@ class Heat(FEM, ABC):
         state = torch.zeros(
             2, self.n_int, self.n_elem, self.material.n_state
         )  # state variables
-        dtemp = torch.zeros(self.n_nod, self.n_dof_per_node)  # temperature increment
+        # temperature increment
+        dtemp = torch.zeros(self.n_nod, self.n_dof_per_node)
         dtemp_grad0 = torch.zeros(
             self.n_elem, self.n_dof_per_node, self.n_dim
         )  # temperature gradient increment
@@ -662,7 +677,8 @@ class Heat(FEM, ABC):
             # Compute element stiffness matrix
             if self.K.numel() == 0 or not self.material.n_state == 0:
                 # Material stiffness
-                BCB = torch.einsum("...ij,...iN,...jM->...NM", ddflux_ddgrad, B, B)
+                BCB = torch.einsum(
+                    "...ij,...iN,...jM->...NM", ddflux_ddgrad, B, B)
                 BCB = BCB.reshape(
                     -1, self.n_dof_per_node * N_nod, self.n_dof_per_node * N_nod
                 )
@@ -712,7 +728,8 @@ class Heat(FEM, ABC):
 
         N_inc = len(increments)  # number of temporal increments
         # N_output = len(t_output)  # number of output steps
-        N_output = N_inc  # current design requires to explicitly store all increments.
+        # current design requires to explicitly store all increments.
+        N_output = N_inc
 
         # release boundary conditions, restore
         self.constraints[:] = bc_constraints

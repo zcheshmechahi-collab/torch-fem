@@ -2194,10 +2194,9 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         p_ft=None,
         k_res_ft=None,
     ):
-
-        self.eta_ft = float(eta_ft) if eta_ft is not None else 0.0
-        self.p_ft = p_ft if p_ft is not None else 1.0
-        self.k_res_ft = k_res_ft if k_res_ft is not None else 0.0
+        self.eta_ft = float(eta_ft)
+        self.p_ft = p_ft
+        self.k_res_ft = k_res_ft
 
         super().__init__(
             E_1=E1,
@@ -2211,6 +2210,30 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
             G_23=G23,
             rho=rho,
         )
+
+        # store strengths & damage evolution parameters as tensors
+    #    self.Xt = torch.as_tensor(Xt)
+    #    self.Xc = torch.as_tensor(Xc)
+    #    self.Yt = torch.as_tensor(Yt)
+    #    self.Yc = torch.as_tensor(Yc)
+    #    self.S12 = torch.as_tensor(S12)
+
+    #    if S13 is None:
+    #        S13 = S12
+    #    if S23 is None:
+    #        S23 = S12
+
+    #    self.S13 = torch.as_tensor(S13)
+    #    self.S23 = torch.as_tensor(S23)
+
+        # fracture energies and characteristic length
+    #    self.G_ft = torch.as_tensor(G_ft if G_ft is not None else 1.0)
+    #    self.G_fc = torch.as_tensor(G_fc if G_fc is not None else 1.0)
+    #    self.G_mt = torch.as_tensor(G_mt if G_mt is not None else 1.0)
+    #    self.G_mc = torch.as_tensor(G_mc if G_mc is not None else 1.0)
+
+        # [δ_ft_max, δ_fc_max, δ_mt_max, δ_mc_max, d_ft, d_fc, d_mt, d_mc]
+    #    self.n_state = 8
 
         self.Xt = Xt
         self.Xc = Xc
@@ -2231,8 +2254,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         self.G_mt = G_mt if G_mt is not None else 1.0
         self.G_mc = G_mc if G_mc is not None else 1.0
 
-        # [delta_ft_max, d_ft, delta_fc_max, d_fc, delta_mt_max, d_mt, delta_mc_max, d_mc]
-        self.n_state = 8
+        self.n_state = 2  # [delta_ft_max, d_ft]
 
     def vectorize(self, n_elem: int):
         """
@@ -2289,6 +2311,100 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         mat.is_vectorized = True
         return mat
 
+
+#    def step(
+#        self,
+#        H_inc: torch.Tensor,
+#        F: torch.Tensor,
+#        sigma: torch.Tensor,
+#        state: torch.Tensor,
+#        de0: torch.Tensor,
+#        cl: torch.Tensor,
+#        iter: int,
+#    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+
+#        """
+#        Step update for anisotropic Hashin–MLT–Abaqus damage model.
+#        Follows the same architecture as IsotropicDamage3D, but with
+#        multiple failure modes and anisotropic stiffness degradation.
+#        """
+
+       # 1) total small strain eps_new (same pattern as IsotropicDamage3D)
+    #    H_new = (F - torch.eye(H_inc.shape[-1])) + H_inc
+    #    eps_new = 0.5 * (H_new.transpose(-1, -2) + H_new)
+
+        # ------------------------------------------------------------
+    #    # 2) unpack state
+    #    delta_ft_max = state[..., 0]
+    #    delta_fc_max = state[..., 1]
+    #    delta_mt_max = state[..., 2]
+    #    delta_mc_max = state[..., 3]
+
+    #    d_ft = state[..., 4]
+    #    d_fc = state[..., 5]
+    #    d_mt = state[..., 6]
+    #    d_mc = state[..., 7]
+
+    #    state_new = state.clone()
+
+    #    # 3) effective (undamaged) stress: sigma_hat = C : (eps_new - de0)
+    #    sigma_hat = torch.einsum("...ijkl,...kl->...ij", self.C, eps_new - de0)
+
+    #    # 4) Hashin initiation functions (placeholders)
+    #    f_ft = self.hashin_ft(sigma_hat)
+    #    f_fc = self.hashin_fc(sigma_hat)
+    #    f_mt = self.hashin_mt(sigma_hat)
+    #    f_mc = self.hashin_mc(sigma_hat)
+
+    #    # 5) equivalent displacements per mode (placeholders, Abaqus-style)
+    #    delta_ft = self.eq_disp_ft(eps_new, cl)
+    #    delta_fc = self.eq_disp_fc(eps_new, cl)
+    #    delta_mt = self.eq_disp_mt(eps_new, cl)
+    #    delta_mc = self.eq_disp_mc(eps_new, cl)
+
+    #    # 6) history variables (max δ)
+    #    delta_ft_max_new = torch.maximum(delta_ft_max, delta_ft)
+    #    delta_fc_max_new = torch.maximum(delta_fc_max, delta_fc)
+    #    delta_mt_max_new = torch.maximum(delta_mt_max, delta_mt)
+    #    delta_mc_max_new = torch.maximum(delta_mc_max, delta_mc)
+
+        # 7) damage evolution per mode (placeholders – Matzenmiller/Abaqus law)
+    #    d_ft_new = self.damage_law_ft(delta_ft_max_new, f_ft)
+    #    d_fc_new = self.damage_law_fc(delta_fc_max_new, f_fc)
+    #    d_mt_new = self.damage_law_mt(delta_mt_max_new, f_mt)
+    #    d_mc_new = self.damage_law_mc(delta_mc_max_new, f_mc)
+
+        # 8) combine modal damage into directional damage variables
+        #    here you can start with a very simple combination; refine later.
+    #    d_f = torch.where(sigma_hat[..., 0, 0] >= 0, d_ft_new, d_fc_new)
+    #    d_m = torch.where(sigma_hat[..., 1, 1] >= 0, d_mt_new, d_mc_new)
+    #    d_s = 1.0 - (1.0 - d_ft_new) * (1.0 - d_fc_new) * \
+    #        (1.0 - d_mt_new) * (1.0 - d_mc_new)
+
+        # 9) damaged stiffness tensor C_d
+    #    C_d = self.build_damaged_stiffness(d_f, d_m, d_s)
+
+        # 10) damaged stress
+    #    sigma_new = torch.einsum("...ijkl,...kl->...ij", C_d, eps_new - de0)
+
+        # 11) update state
+    #    state_new[..., 0] = delta_ft_max_new
+    #    state_new[..., 1] = delta_fc_max_new
+    #    state_new[..., 2] = delta_mt_max_new
+    #    state_new[..., 3] = delta_mc_max_new
+
+    #    state_new[..., 4] = d_ft_new
+    #    state_new[..., 5] = d_fc_new
+    #    state_new[..., 6] = d_mt_new
+    #    state_new[..., 7] = d_mc_new
+
+        # 12) tangent (secant for first version)
+    #    ddsdde = C_d
+
+    #    return sigma_new, state_new, ddsdde
+        # ---------------------------------------------------------
+
+
     def step(
         self,
         H_inc: torch.Tensor,
@@ -2306,104 +2422,44 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
             F - torch.eye(H_inc.shape[-1], device=F.device, dtype=F.dtype)) + H_inc
         eps_new = 0.5 * (H_new.transpose(-1, -2) + H_new)
 
-        # 2) Unpack state
-
+        # 2) Unpack state: [delta_ft_max, d_ft]
         delta_ft_max = state[..., 0]
         d_ft_prev = state[..., 1]
-
-        delta_fc_max = state[..., 2]
-        d_fc_prev = state[..., 3]
-
-        delta_mt_max = state[..., 4]
-        d_mt_prev = state[..., 5]
-
-        delta_mc_max = state[..., 6]
-        d_mc_prev = state[..., 7]
 
         # 3) Undamaged (effective) stress
         sigma_hat = torch.einsum("...ijkl,...kl->...ij", self.C, eps_new - de0)
 
-        # ============================================================
-        # FT: Fiber Tension
-        # ============================================================
+        # 4) Hashin FT criterion
         f_ft = self.hashin_ft(sigma_hat)
 
+        # 5) Equivalent displacement for FT
         delta_ft = self.eq_disp_ft(eps_new, cl)
+
+        # 6) History update
         delta_ft_max_new = torch.maximum(delta_ft_max, delta_ft)
 
-        eps0_ft = self.Xt / self.E_1
-        delta_0_ft = cl * eps0_ft
+        # 7) Onset displacement delta_0 = cl * eps0, eps0 = Xt/E1
+        eps0 = self.Xt / self.E_1
+        delta_0 = cl * eps0
 
-        d_target_ft = self.damage_law_ft(delta_ft_max_new, delta_0_ft, f_ft)
-        d_target_ft = torch.maximum(d_ft_prev, d_target_ft)
+        # 8) Damage update (energy-based)
+        # --- target damage from energy-based law (same as before)
+        d_target = self.damage_law_ft(delta_ft_max_new, delta_0, f_ft)
+        d_target = torch.maximum(d_ft_prev, d_target)   # irreversibility
 
-        eta_ft = float(self.eta_ft)
+        # --- viscous regularization (Abaqus-like stabilization idea)
+
+        eta = float(self.eta_ft)
         dt = float(getattr(self, "dt_damage", 1.0))
-        alpha_ft = dt / (eta_ft + dt)
-
-        d_ft_new = d_ft_prev + alpha_ft * (d_target_ft - d_ft_prev)
+        alpha = dt / (eta + dt)
+        d_ft_new = d_ft_prev + alpha * (d_target - d_ft_prev)
         d_ft_new = torch.clamp(d_ft_new, 0.0, 0.99)
 
-        # ============================================================
-        # FC: Fiber Compression
-        # ============================================================
-        f_fc = self.hashin_fc(sigma_hat)
+        kmin = 1e-12
 
-        delta_fc = self.eq_disp_fc(eps_new, cl)
-        delta_fc_max_new = torch.maximum(delta_fc_max, delta_fc)
-
-        eps0_fc = self.Xc / self.E_1
-        delta_0_fc = cl * eps0_fc
-
-        d_target_fc = self.damage_law_fc(delta_fc_max_new, delta_0_fc, f_fc)
-        d_target_fc = torch.maximum(d_fc_prev, d_target_fc)
-
-        eta_fc = float(getattr(self, "eta_fc", self.eta_ft))
-        alpha_fc = dt / (eta_fc + dt)
-
-        d_fc_new = d_fc_prev + alpha_fc * (d_target_fc - d_fc_prev)
-        d_fc_new = torch.clamp(d_fc_new, 0.0, 0.99)
-
-        # ============================================================
-        # MT
-        # ============================================================
-        f_mt = self.hashin_mt(sigma_hat)
-        delta_mt = self.eq_disp_mt(eps_new, cl)
-        delta_mt_max_new = torch.maximum(delta_mt_max, delta_mt)
-        eps0_mt = self.Yt / self.E_2
-        delta_0_mt = 0.8 * cl * eps0_mt
-        d_target_mt = self.damage_law_mt(delta_mt_max_new, delta_0_mt, f_mt)
-        d_target_mt = torch.maximum(d_mt_prev, d_target_mt)
-
-        eta_mt = float(getattr(self, "eta_mt", self.eta_ft))
-        alpha_mt = dt / (eta_mt + dt)
-        d_mt_new = d_mt_prev + alpha_mt * (d_target_mt - d_mt_prev)
-        d_mt_new = torch.clamp(d_mt_new, 0.0, 0.99)
-
-        # ============================================================
-        # MC
-        # ============================================================
-        f_mc = self.hashin_mc(sigma_hat)
-        delta_mc = self.eq_disp_mc(eps_new, cl)
-        delta_mc_max_new = torch.maximum(delta_mc_max, delta_mc)
-        eps0_mc = self.Yc / self.E_2
-        delta_0_mc = cl * eps0_mc
-        d_target_mc = self.damage_law_mc(delta_mc_max_new, delta_0_mc, f_mc)
-        d_target_mc = torch.maximum(d_mc_prev, d_target_mc)
-
-        eta_mc = float(getattr(self, "eta_mc", self.eta_ft))
-        alpha_mc = dt / (eta_mc + dt)
-        d_mc_new = d_mc_prev + alpha_mc * (d_target_mc - d_mc_prev)
-        d_mc_new = torch.clamp(d_mc_new, 0.0, 0.99)
-
-        # ============================================================
-        # effective damages
-        # ============================================================
-        d_f = torch.maximum(d_ft_new, d_fc_new)
-        d_m = torch.maximum(d_mt_new, d_mc_new)
-        d_s = d_m  # shear damage
-
-        C_d = self.build_damaged_stiffness(d_f, d_m, d_s)
+        k_res = float(self.k_res_ft)
+        fac = k_res + (1.0 - k_res) * (1.0 - d_ft_new)
+        C_d = (kmin + fac)[..., None, None, None, None] * self.C
 
         # 10) New stress
         sigma_new = torch.einsum("...ijkl,...kl->...ij", C_d, eps_new - de0)
@@ -2413,23 +2469,17 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         state_new[..., 0] = delta_ft_max_new
         state_new[..., 1] = d_ft_new
 
-        state_new[..., 2] = delta_fc_max_new
-        state_new[..., 3] = d_fc_new
-
-        state_new[..., 4] = delta_mt_max_new
-        state_new[..., 5] = d_mt_new
-
-        state_new[..., 6] = delta_mc_max_new
-        state_new[..., 7] = d_mc_new
-
         # 12) Tangent (secant for now)
         ddsdde = C_d
 
         return sigma_new, state_new, ddsdde
 
-    # ============================================================
-    # Hashin_ft, Hashin_fc, Hashin_mt, Hashin_mc
-    # ============================================================
+    # Hashin initiation placeholders
+    # ---------------------------------------------------------
+
+#    def hashin_ft(self, sigma_hat: torch.Tensor) -> torch.Tensor:
+#        # TODO: implement Hashin fiber tension criterion
+#        return torch.zeros_like(sigma_hat[..., 0, 0])
 
     def hashin_ft(self, sigma_hat: torch.Tensor) -> torch.Tensor:
         sig11 = sigma_hat[..., 0, 0]
@@ -2437,97 +2487,39 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         tau13 = sigma_hat[..., 0, 2]
 
         f = (sig11 / self.Xt) ** 2 + \
-            (tau12 / self.S12) ** 2 + \
-            (tau13 / self.S13) ** 2
+            (tau12 / self.S12) ** 2 + (tau13 / self.S13) ** 2
         f = torch.where(sig11 > 0, f, torch.zeros_like(f))
         return f
 
     def hashin_fc(self, sigma_hat: torch.Tensor) -> torch.Tensor:
-        sig11 = sigma_hat[..., 0, 0]
-
-        f = (sig11 / self.Xc) ** 2
-        f = torch.where(sig11 < 0, f, torch.zeros_like(f))
-        return f
+        # TODO: implement Hashin fiber compression criterion
+        return torch.zeros_like(sigma_hat[..., 0, 0])
 
     def hashin_mt(self, sigma_hat: torch.Tensor) -> torch.Tensor:
-        sig22 = sigma_hat[..., 1, 1]
-        sig33 = sigma_hat[..., 2, 2]
-        tau12 = sigma_hat[..., 0, 1]
-        tau13 = sigma_hat[..., 0, 2]
-        tau23 = sigma_hat[..., 1, 2]
-
-        sig_t = sig22 + sig33
-
-        f = (sig_t / self.Yt) ** 2 + \
-            (tau12 / self.S12) ** 2 + \
-            (tau13 / self.S13) ** 2 + \
-            (tau23 / self.S23) ** 2
-
-        f = torch.where(sig_t > 0, f, torch.zeros_like(f))
-        return f
+        # TODO: implement Hashin matrix tension criterion
+        return torch.zeros_like(sigma_hat[..., 1, 1])
 
     def hashin_mc(self, sigma_hat: torch.Tensor) -> torch.Tensor:
-        sig22 = sigma_hat[..., 1, 1]
-        sig33 = sigma_hat[..., 2, 2]
-        tau12 = sigma_hat[..., 0, 1]
-        tau13 = sigma_hat[..., 0, 2]
-        tau23 = sigma_hat[..., 1, 2]
-
-        sig_c = -(sig22 + sig33)
-
-        f = (sig_c / self.Yc) ** 2 + \
-            (tau12 / self.S12) ** 2 + \
-            (tau13 / self.S13) ** 2 + \
-            (tau23 / self.S23) ** 2
-
-        f = torch.where(sig_c > 0, f, torch.zeros_like(f))
-        return f
+        # TODO: implement Hashin matrix compression criterion
+        return torch.zeros_like(sigma_hat[..., 1, 1])
 
     # ---------------------------------------------------------
-    # Equivalent displacement (Abaqus-style)
+    # Equivalent displacement (Abaqus-style) placeholders
     # ---------------------------------------------------------
 
     def eq_disp_ft(self, eps: torch.Tensor, cl: torch.Tensor) -> torch.Tensor:
+     # delta = cl * <eps11>+
         eps11_pos = torch.relu(eps[..., 0, 0])
         return cl * eps11_pos
 
     def eq_disp_fc(self, eps: torch.Tensor, cl: torch.Tensor) -> torch.Tensor:
-        eps11_neg = torch.relu(-eps[..., 0, 0])
-        return cl * eps11_neg
+        return torch.zeros_like(eps[..., 0, 0])
 
     def eq_disp_mt(self, eps: torch.Tensor, cl: torch.Tensor) -> torch.Tensor:
-        eps22 = eps[..., 1, 1]
-        eps33 = eps[..., 2, 2]
-        gam12 = eps[..., 0, 1]
-        gam13 = eps[..., 0, 2]
-        gam23 = eps[..., 1, 2]
-
-        eps_t = torch.relu(eps22 + eps33)
-
-        eps_eq = torch.sqrt(
-            eps_t**2 +
-            gam12**2 +
-            gam13**2 +
-            gam23**2
-        )
-        return cl * eps_eq
+        return torch.zeros_like(eps[..., 1, 1])
 
     def eq_disp_mc(self, eps: torch.Tensor, cl: torch.Tensor) -> torch.Tensor:
-        eps22 = eps[..., 1, 1]
-        eps33 = eps[..., 2, 2]
-        gam12 = eps[..., 0, 1]
-        gam13 = eps[..., 0, 2]
-        gam23 = eps[..., 1, 2]
-
-        eps_c = torch.relu(-(eps22 + eps33))
-
-        eps_eq = torch.sqrt(
-            eps_c**2 +
-            gam12**2 +
-            gam13**2 +
-            gam23**2
-        )
-        return cl * eps_eq
+        return torch.zeros_like(eps[..., 1, 1])
 
     # ---------------------------------------------------------
     # Damage evolution laws (Matzenmiller / Abaqus-style)
@@ -2539,6 +2531,12 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         delta_0: torch.Tensor,
         f_ft: torch.Tensor,
     ) -> torch.Tensor:
+        # Linear traction-separation softening with fracture energy G_ft.
+        # Onset: delta_max >= delta_0 and f_ft >= 1.
+        # Final displacement: delta_f = 2 * G_ft / Xt  (linear softening area)
+        # Abaqus-like damage evolution:
+        # d = delta_f * (delta_max - delta_0) / (delta_max * (delta_f - delta_0))
+
         Xt = self.Xt
         G = self.G_ft
 
@@ -2557,147 +2555,31 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
 
         return torch.clamp(d, 0.0, 0.99)
 
-    def damage_law_fc(
-        self,
-        delta_max: torch.Tensor,
-        delta_0: torch.Tensor,
-        f_fc: torch.Tensor,
-    ) -> torch.Tensor:
-        Xc = self.Xc
-        G = self.G_fc
+    def damage_law_fc(self, delta_fc_max: torch.Tensor, f_fc: torch.Tensor) -> torch.Tensor:
+        return torch.zeros_like(delta_fc_max)
 
-        eps = 1e-12 * (delta_0.abs() + 1.0)
+    def damage_law_mt(self, delta_mt_max: torch.Tensor, f_mt: torch.Tensor) -> torch.Tensor:
+        return torch.zeros_like(delta_mt_max)
 
-        delta_f = 2.0 * G / (Xc + eps)
-
-        active = (delta_max >= delta_0) & (
-            f_fc >= 1.0) & (delta_f > delta_0 + eps)
-
-        num = delta_f * (delta_max - delta_0)
-        den = delta_max * (delta_f - delta_0 + eps)
-
-        d = num / (den + eps)
-        d = torch.where(active, d, torch.zeros_like(d))
-
-        return torch.clamp(d, 0.0, 0.99)
-
-    def damage_law_mt(
-        self,
-        delta_max: torch.Tensor,
-        delta_0: torch.Tensor,
-        f_mt: torch.Tensor,
-    ) -> torch.Tensor:
-        Yt = self.Yt
-        G = self.G_mt
-
-        eps = 1e-12 * (delta_0.abs() + 1.0)
-
-        delta_f = 2.0 * G / (Yt + eps)
-
-        active = (delta_max >= delta_0) & (delta_f > delta_0 + eps)
-
-        num = delta_f * (delta_max - delta_0)
-        den = delta_max * (delta_f - delta_0 + eps)
-
-        d = num / (den + eps)
-        d = torch.where(active, d, torch.zeros_like(d))
-
-        return torch.clamp(d, 0.0, 0.99)
-
-    def damage_law_mc(
-        self,
-        delta_max: torch.Tensor,
-        delta_0: torch.Tensor,
-        f_mc: torch.Tensor,
-    ) -> torch.Tensor:
-        Yc = self.Yc
-        G = self.G_mc
-
-        eps = 1e-12 * (delta_0.abs() + 1.0)
-
-        delta_f = 2.0 * G / (Yc + eps)
-
-        active = (delta_max >= delta_0) & (
-            f_mc >= 1.0) & (delta_f > delta_0 + eps)
-
-        num = delta_f * (delta_max - delta_0)
-        den = delta_max * (delta_f - delta_0 + eps)
-
-        d = num / (den + eps)
-        d = torch.where(active, d, torch.zeros_like(d))
-
-        return torch.clamp(d, 0.0, 0.99)
+    def damage_law_mc(self, delta_mc_max: torch.Tensor, f_mc: torch.Tensor) -> torch.Tensor:
+        return torch.zeros_like(delta_mc_max)
 
     # ---------------------------------------------------------
     # Build damaged stiffness tensor (MLT-like)
     # ---------------------------------------------------------
-
     def build_damaged_stiffness(
         self,
         d_f: torch.Tensor,
         d_m: torch.Tensor,
-        d_s: torch.Tensor | None = None,
+        d_s: torch.Tensor,
     ) -> torch.Tensor:
         """
-        Direction-dependent damaged stiffness.
+        Build anisotropically damaged stiffness tensor C_d(d_f, d_m, d_s)
+        from the undamaged C.
 
-        d_f : fiber damage   -> mainly longitudinal direction (11) and related couplings
-        d_m : matrix damage  -> mainly transverse directions (22, 33) and related couplings
-        d_s : shear damage   -> shear-related terms; if None, use d_m
+        For the first version, you can even start with
+        an isotropic-like combination and refine later.
         """
-        kmin = 1e-12
-
-        if d_s is None:
-            d_s = d_m
-
-        # retention factors
-        kf = torch.clamp(1.0 - d_f, kmin, 1.0)
-        km = torch.clamp(1.0 - d_m, kmin, 1.0)
-        ks = torch.clamp(1.0 - d_s, kmin, 1.0)
-
-        # mixed retention for coupling terms involving both fiber and matrix directions
-        kfm = torch.sqrt(kf * km)
-
-        C0 = self.C
-        C_d = C0.clone()
-
-        # ---------------------------------------------------------
-        # normal stiffness terms
-        # ---------------------------------------------------------
-        C_d[..., 0, 0, 0, 0] = kf * C0[..., 0, 0, 0, 0]
-        C_d[..., 1, 1, 1, 1] = km * C0[..., 1, 1, 1, 1]
-        C_d[..., 2, 2, 2, 2] = km * C0[..., 2, 2, 2, 2]
-
-        # ---------------------------------------------------------
-        # normal coupling terms
-        # ---------------------------------------------------------
-        C_d[..., 0, 0, 1, 1] = kfm * C0[..., 0, 0, 1, 1]
-        C_d[..., 1, 1, 0, 0] = kfm * C0[..., 1, 1, 0, 0]
-
-        C_d[..., 0, 0, 2, 2] = kfm * C0[..., 0, 0, 2, 2]
-        C_d[..., 2, 2, 0, 0] = kfm * C0[..., 2, 2, 0, 0]
-
-        C_d[..., 1, 1, 2, 2] = km * C0[..., 1, 1, 2, 2]
-        C_d[..., 2, 2, 1, 1] = km * C0[..., 2, 2, 1, 1]
-
-        # ---------------------------------------------------------
-        # shear terms:
-        # 12, 13 -> influenced by fiber + matrix
-        # 23     -> mostly matrix/shear
-        # ---------------------------------------------------------
-        C_d[..., 0, 1, 0, 1] = kfm * C0[..., 0, 1, 0, 1]
-        C_d[..., 1, 0, 1, 0] = kfm * C0[..., 1, 0, 1, 0]
-        C_d[..., 0, 1, 1, 0] = kfm * C0[..., 0, 1, 1, 0]
-        C_d[..., 1, 0, 0, 1] = kfm * C0[..., 1, 0, 0, 1]
-
-        C_d[..., 0, 2, 0, 2] = kfm * C0[..., 0, 2, 0, 2]
-        C_d[..., 2, 0, 2, 0] = kfm * C0[..., 2, 0, 2, 0]
-        C_d[..., 0, 2, 2, 0] = kfm * C0[..., 0, 2, 2, 0]
-        C_d[..., 2, 0, 0, 2] = kfm * C0[..., 2, 0, 0, 2]
-
-        C_d[..., 1, 2, 1, 2] = ks * C0[..., 1, 2, 1, 2]
-        C_d[..., 2, 1, 2, 1] = ks * C0[..., 2, 1, 2, 1]
-        C_d[..., 1, 2, 2, 1] = ks * C0[..., 1, 2, 2, 1]
-        C_d[..., 2, 1, 1, 2] = ks * C0[..., 2, 1, 1, 2]
-
-        return C_d
+        # TODO: implement real MLT degradation.
+        # For now: no damage (just C) so that code runs.
+        return self.C

@@ -2371,7 +2371,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         delta_mt = self.eq_disp_mt(eps_new, cl)
         delta_mt_max_new = torch.maximum(delta_mt_max, delta_mt)
         eps0_mt = self.Yt / self.E_2
-        delta_0_mt = 0.8 * cl * eps0_mt
+        delta_0_mt = cl * eps0_mt
         d_target_mt = self.damage_law_mt(delta_mt_max_new, delta_0_mt, f_mt)
         d_target_mt = torch.maximum(d_mt_prev, d_target_mt)
 
@@ -2428,7 +2428,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         return sigma_new, state_new, ddsdde
 
     # ============================================================
-    # Hashin_ft, Hashin_fc, Hashin_mt, Hashin_mc
+    # Hashin_ft, Hashin_fc, Hashin_mt, Hashin_mt
     # ============================================================
 
     def hashin_ft(self, sigma_hat: torch.Tensor) -> torch.Tensor:
@@ -2594,7 +2594,8 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
 
         delta_f = 2.0 * G / (Yt + eps)
 
-        active = (delta_max >= delta_0) & (delta_f > delta_0 + eps)
+        active = (delta_max >= delta_0) & (
+            f_mt >= 1.0) & (delta_f > delta_0 + eps)
 
         num = delta_f * (delta_max - delta_0)
         den = delta_max * (delta_f - delta_0 + eps)
@@ -2639,65 +2640,18 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         d_s: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
-        Direction-dependent damaged stiffness.
-
-        d_f : fiber damage   -> mainly longitudinal direction (11) and related couplings
-        d_m : matrix damage  -> mainly transverse directions (22, 33) and related couplings
-        d_s : shear damage   -> shear-related terms; if None, use d_m
+        Current simplified version:
+        scalar stiffness degradation based on fiber/matrix damage.
+        d_s is reserved for future shear-damage extension.
         """
         kmin = 1e-12
+        k_res = float(self.k_res_ft)
+        k_res = max(0.0, min(1.0, k_res))
 
-        if d_s is None:
-            d_s = d_m
+        # simplest scalar combination for now
+        d_all = torch.maximum(d_f, d_m)
 
-        # retention factors
-        kf = torch.clamp(1.0 - d_f, kmin, 1.0)
-        km = torch.clamp(1.0 - d_m, kmin, 1.0)
-        ks = torch.clamp(1.0 - d_s, kmin, 1.0)
+        fac = k_res + (1.0 - k_res) * (1.0 - d_all)
 
-        # mixed retention for coupling terms involving both fiber and matrix directions
-        kfm = torch.sqrt(kf * km)
-
-        C0 = self.C
-        C_d = C0.clone()
-
-        # ---------------------------------------------------------
-        # normal stiffness terms
-        # ---------------------------------------------------------
-        C_d[..., 0, 0, 0, 0] = kf * C0[..., 0, 0, 0, 0]
-        C_d[..., 1, 1, 1, 1] = km * C0[..., 1, 1, 1, 1]
-        C_d[..., 2, 2, 2, 2] = km * C0[..., 2, 2, 2, 2]
-
-        # ---------------------------------------------------------
-        # normal coupling terms
-        # ---------------------------------------------------------
-        C_d[..., 0, 0, 1, 1] = kfm * C0[..., 0, 0, 1, 1]
-        C_d[..., 1, 1, 0, 0] = kfm * C0[..., 1, 1, 0, 0]
-
-        C_d[..., 0, 0, 2, 2] = kfm * C0[..., 0, 0, 2, 2]
-        C_d[..., 2, 2, 0, 0] = kfm * C0[..., 2, 2, 0, 0]
-
-        C_d[..., 1, 1, 2, 2] = km * C0[..., 1, 1, 2, 2]
-        C_d[..., 2, 2, 1, 1] = km * C0[..., 2, 2, 1, 1]
-
-        # ---------------------------------------------------------
-        # shear terms:
-        # 12, 13 -> influenced by fiber + matrix
-        # 23     -> mostly matrix/shear
-        # ---------------------------------------------------------
-        C_d[..., 0, 1, 0, 1] = kfm * C0[..., 0, 1, 0, 1]
-        C_d[..., 1, 0, 1, 0] = kfm * C0[..., 1, 0, 1, 0]
-        C_d[..., 0, 1, 1, 0] = kfm * C0[..., 0, 1, 1, 0]
-        C_d[..., 1, 0, 0, 1] = kfm * C0[..., 1, 0, 0, 1]
-
-        C_d[..., 0, 2, 0, 2] = kfm * C0[..., 0, 2, 0, 2]
-        C_d[..., 2, 0, 2, 0] = kfm * C0[..., 2, 0, 2, 0]
-        C_d[..., 0, 2, 2, 0] = kfm * C0[..., 0, 2, 2, 0]
-        C_d[..., 2, 0, 0, 2] = kfm * C0[..., 2, 0, 0, 2]
-
-        C_d[..., 1, 2, 1, 2] = ks * C0[..., 1, 2, 1, 2]
-        C_d[..., 2, 1, 2, 1] = ks * C0[..., 2, 1, 2, 1]
-        C_d[..., 1, 2, 2, 1] = ks * C0[..., 1, 2, 2, 1]
-        C_d[..., 2, 1, 1, 2] = ks * C0[..., 2, 1, 1, 2]
-
+        C_d = (kmin + fac)[..., None, None, None, None] * self.C
         return C_d
