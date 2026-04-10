@@ -2159,10 +2159,11 @@ class OrthotropicConductivity2D(IsotropicConductivity2D):
 
 class AnisotropicDamage3D(OrthotropicElasticity3D):
     """
-    Anisotropic damage model for UD composites (Hashin + MLT + Abaqus-like).
+    Anisotropic damage model for UD composites
+    (Hashin-type initiation + Abaqus-like linear softening).
 
-    - Inherits undamaged orthotropic stiffness C0 from OrthotropicElasticity3D
-    - Adds damage state variables and step() update like IsotropicDamage3D
+    State variables:
+    [delta_ft_max, d_ft, delta_fc_max, d_fc, delta_mt_max, d_mt, delta_mc_max, d_mc]
     """
 
     def __init__(
@@ -2177,27 +2178,38 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         nu13,
         nu23,
         rho,
-        # Hashin strength parameters
-        Xt,  # fiber tension strength
-        Xc,  # fiber compression strength
-        Yt,  # matrix tension strength
-        Yc,  # matrix compression strength
-        S12,  # in-plane shear strength
-        S13=None,  # optional out-of-plane
+        # strengths
+        Xt,
+        Xc,
+        Yt,
+        Yc,
+        S12,
+        S13=None,
         S23=None,
-        # damage evolution params (Abaqus-style)
+        # fracture energies
         G_ft=None,
         G_fc=None,
         G_mt=None,
         G_mc=None,
+        # viscosity-like regularization
         eta_ft=None,
+        eta_fc=None,
+        eta_mt=None,
+        eta_mc=None,
+        # optional legacy params
         p_ft=None,
         k_res_ft=None,
+        # pseudo-time step for damage update
+        dt_damage=1.0,
     ):
-
         self.eta_ft = float(eta_ft) if eta_ft is not None else 0.0
+        self.eta_fc = float(eta_fc) if eta_fc is not None else 0.0
+        self.eta_mt = float(eta_mt) if eta_mt is not None else 0.0
+        self.eta_mc = float(eta_mc) if eta_mc is not None else 0.0
+
         self.p_ft = p_ft if p_ft is not None else 1.0
         self.k_res_ft = k_res_ft if k_res_ft is not None else 0.0
+        self.dt_damage = float(dt_damage)
 
         super().__init__(
             E_1=E1,
@@ -2231,29 +2243,18 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         self.G_mt = G_mt if G_mt is not None else 1.0
         self.G_mc = G_mc if G_mc is not None else 1.0
 
-        # [delta_ft_max, d_ft, delta_fc_max, d_fc, delta_mt_max, d_mt, delta_mc_max, d_mc]
         self.n_state = 8
 
     def vectorize(self, n_elem: int):
-        """
-        Returns a vectorized copy of the material for `n_elem` elements.
-
-        This creates batched tensors for all material parameters. If the
-        material is already vectorized (`self.is_vectorized == True`),
-        the function simply returns `self` without modification.
-        """
-
         if getattr(self, "is_vectorized", False):
             return self
 
-        # Helper function to broadcast scalars/tensors to shape (n_elem,)
         def broadcast(x):
             t = torch.as_tensor(x)
             if t.ndim == 0:
                 return t.repeat(n_elem)
             return t
 
-        # Create a new vectorized material instance
         mat = AnisotropicDamage3D(
             E1=broadcast(self.E_1),
             E2=broadcast(self.E_2),
@@ -2265,7 +2266,6 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
             nu13=broadcast(self.nu_13),
             nu23=broadcast(self.nu_23),
             rho=broadcast(self.rho),
-
             Xt=broadcast(self.Xt),
             Xc=broadcast(self.Xc),
             Yt=broadcast(self.Yt),
@@ -2273,17 +2273,17 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
             S12=broadcast(self.S12),
             S13=broadcast(self.S13),
             S23=broadcast(self.S23),
-
             G_ft=broadcast(self.G_ft),
             G_fc=broadcast(self.G_fc),
             G_mt=broadcast(self.G_mt),
             G_mc=broadcast(self.G_mc),
-
             eta_ft=self.eta_ft,
+            eta_fc=self.eta_fc,
+            eta_mt=self.eta_mt,
+            eta_mc=self.eta_mc,
             p_ft=self.p_ft,
-            k_res_ft=self.k_res_ft
-
-
+            k_res_ft=self.k_res_ft,
+            dt_damage=self.dt_damage,
         )
 
         mat.is_vectorized = True
@@ -2298,15 +2298,12 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         de0: torch.Tensor,
         cl: torch.Tensor,
         iter: int,
-        dl: float | None = None
+        dl: float | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
-        # 1) Small strain
-        H_new = (
-            F - torch.eye(H_inc.shape[-1], device=F.device, dtype=F.dtype)) + H_inc
+        I = torch.eye(H_inc.shape[-1], device=F.device, dtype=F.dtype)
+        H_new = (F - I) + H_inc
         eps_new = 0.5 * (H_new.transpose(-1, -2) + H_new)
-
-        # 2) Unpack state
 
         delta_ft_max = state[..., 0]
         d_ft_prev = state[..., 1]
@@ -2320,14 +2317,10 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         delta_mc_max = state[..., 6]
         d_mc_prev = state[..., 7]
 
-        # 3) Undamaged (effective) stress
         sigma_hat = torch.einsum("...ijkl,...kl->...ij", self.C, eps_new - de0)
 
-        # ============================================================
-        # FT: Fiber Tension
-        # ============================================================
+        # ---------------- FT ----------------
         f_ft = self.hashin_ft(sigma_hat)
-
         delta_ft = self.eq_disp_ft(eps_new, cl)
         delta_ft_max_new = torch.maximum(delta_ft_max, delta_ft)
 
@@ -2337,18 +2330,12 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         d_target_ft = self.damage_law_ft(delta_ft_max_new, delta_0_ft, f_ft)
         d_target_ft = torch.maximum(d_ft_prev, d_target_ft)
 
-        eta_ft = float(self.eta_ft)
-        dt = float(getattr(self, "dt_damage", 1.0))
-        alpha_ft = dt / (eta_ft + dt)
-
+        alpha_ft = self.dt_damage / (self.eta_ft + self.dt_damage)
         d_ft_new = d_ft_prev + alpha_ft * (d_target_ft - d_ft_prev)
         d_ft_new = torch.clamp(d_ft_new, 0.0, 0.99)
 
-        # ============================================================
-        # FC: Fiber Compression
-        # ============================================================
+        # ---------------- FC ----------------
         f_fc = self.hashin_fc(sigma_hat)
-
         delta_fc = self.eq_disp_fc(eps_new, cl)
         delta_fc_max_new = torch.maximum(delta_fc_max, delta_fc)
 
@@ -2358,77 +2345,64 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         d_target_fc = self.damage_law_fc(delta_fc_max_new, delta_0_fc, f_fc)
         d_target_fc = torch.maximum(d_fc_prev, d_target_fc)
 
-        eta_fc = float(getattr(self, "eta_fc", self.eta_ft))
-        alpha_fc = dt / (eta_fc + dt)
-
+        alpha_fc = self.dt_damage / (self.eta_fc + self.dt_damage)
         d_fc_new = d_fc_prev + alpha_fc * (d_target_fc - d_fc_prev)
         d_fc_new = torch.clamp(d_fc_new, 0.0, 0.99)
 
-        # ============================================================
-        # MT
-        # ============================================================
+        # ---------------- MT ----------------
         f_mt = self.hashin_mt(sigma_hat)
         delta_mt = self.eq_disp_mt(eps_new, cl)
         delta_mt_max_new = torch.maximum(delta_mt_max, delta_mt)
+
         eps0_mt = self.Yt / self.E_2
-        delta_0_mt = 0.8 * cl * eps0_mt
+        delta_0_mt = cl * eps0_mt
+
         d_target_mt = self.damage_law_mt(delta_mt_max_new, delta_0_mt, f_mt)
         d_target_mt = torch.maximum(d_mt_prev, d_target_mt)
 
-        eta_mt = float(getattr(self, "eta_mt", self.eta_ft))
-        alpha_mt = dt / (eta_mt + dt)
+        alpha_mt = self.dt_damage / (self.eta_mt + self.dt_damage)
         d_mt_new = d_mt_prev + alpha_mt * (d_target_mt - d_mt_prev)
         d_mt_new = torch.clamp(d_mt_new, 0.0, 0.99)
 
-        # ============================================================
-        # MC
-        # ============================================================
+        # ---------------- MC ----------------
         f_mc = self.hashin_mc(sigma_hat)
         delta_mc = self.eq_disp_mc(eps_new, cl)
         delta_mc_max_new = torch.maximum(delta_mc_max, delta_mc)
+
         eps0_mc = self.Yc / self.E_2
         delta_0_mc = cl * eps0_mc
+
         d_target_mc = self.damage_law_mc(delta_mc_max_new, delta_0_mc, f_mc)
         d_target_mc = torch.maximum(d_mc_prev, d_target_mc)
 
-        eta_mc = float(getattr(self, "eta_mc", self.eta_ft))
-        alpha_mc = dt / (eta_mc + dt)
+        alpha_mc = self.dt_damage / (self.eta_mc + self.dt_damage)
         d_mc_new = d_mc_prev + alpha_mc * (d_target_mc - d_mc_prev)
         d_mc_new = torch.clamp(d_mc_new, 0.0, 0.99)
 
-        # ============================================================
         # effective damages
-        # ============================================================
         d_f = torch.maximum(d_ft_new, d_fc_new)
         d_m = torch.maximum(d_mt_new, d_mc_new)
-        d_s = d_m  # shear damage
+        d_s = d_m
 
         C_d = self.build_damaged_stiffness(d_f, d_m, d_s)
 
-        # 10) New stress
         sigma_new = torch.einsum("...ijkl,...kl->...ij", C_d, eps_new - de0)
 
-        # 11) Pack new state
         state_new = state.clone()
         state_new[..., 0] = delta_ft_max_new
         state_new[..., 1] = d_ft_new
-
         state_new[..., 2] = delta_fc_max_new
         state_new[..., 3] = d_fc_new
-
         state_new[..., 4] = delta_mt_max_new
         state_new[..., 5] = d_mt_new
-
         state_new[..., 6] = delta_mc_max_new
         state_new[..., 7] = d_mc_new
 
-        # 12) Tangent (secant for now)
         ddsdde = C_d
-
         return sigma_new, state_new, ddsdde
 
     # ============================================================
-    # Hashin_ft, Hashin_fc, Hashin_mt, Hashin_mc
+    # Hashin criteria
     # ============================================================
 
     def hashin_ft(self, sigma_hat: torch.Tensor) -> torch.Tensor:
@@ -2439,6 +2413,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         f = (sig11 / self.Xt) ** 2 + \
             (tau12 / self.S12) ** 2 + \
             (tau13 / self.S13) ** 2
+
         f = torch.where(sig11 > 0, f, torch.zeros_like(f))
         return f
 
@@ -2456,14 +2431,16 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         tau13 = sigma_hat[..., 0, 2]
         tau23 = sigma_hat[..., 1, 2]
 
-        sig_t = sig22 + sig33
+        sig22_pos = torch.relu(sig22)
+        sig33_pos = torch.relu(sig33)
+
+        sig_t = torch.sqrt(sig22_pos**2 + sig33_pos**2)
 
         f = (sig_t / self.Yt) ** 2 + \
             (tau12 / self.S12) ** 2 + \
             (tau13 / self.S13) ** 2 + \
             (tau23 / self.S23) ** 2
 
-        f = torch.where(sig_t > 0, f, torch.zeros_like(f))
         return f
 
     def hashin_mc(self, sigma_hat: torch.Tensor) -> torch.Tensor:
@@ -2473,19 +2450,21 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         tau13 = sigma_hat[..., 0, 2]
         tau23 = sigma_hat[..., 1, 2]
 
-        sig_c = -(sig22 + sig33)
+        sig22_neg = torch.relu(-sig22)
+        sig33_neg = torch.relu(-sig33)
+
+        sig_c = torch.sqrt(sig22_neg**2 + sig33_neg**2)
 
         f = (sig_c / self.Yc) ** 2 + \
             (tau12 / self.S12) ** 2 + \
             (tau13 / self.S13) ** 2 + \
             (tau23 / self.S23) ** 2
 
-        f = torch.where(sig_c > 0, f, torch.zeros_like(f))
         return f
 
-    # ---------------------------------------------------------
-    # Equivalent displacement (Abaqus-style)
-    # ---------------------------------------------------------
+    # ============================================================
+    # Equivalent displacement
+    # ============================================================
 
     def eq_disp_ft(self, eps: torch.Tensor, cl: torch.Tensor) -> torch.Tensor:
         eps11_pos = torch.relu(eps[..., 0, 0])
@@ -2498,14 +2477,16 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
     def eq_disp_mt(self, eps: torch.Tensor, cl: torch.Tensor) -> torch.Tensor:
         eps22 = eps[..., 1, 1]
         eps33 = eps[..., 2, 2]
-        gam12 = eps[..., 0, 1]
-        gam13 = eps[..., 0, 2]
-        gam23 = eps[..., 1, 2]
+        gam12 = 2.0 * eps[..., 0, 1]
+        gam13 = 2.0 * eps[..., 0, 2]
+        gam23 = 2.0 * eps[..., 1, 2]
 
-        eps_t = torch.relu(eps22 + eps33)
+        eps22_pos = torch.relu(eps22)
+        eps33_pos = torch.relu(eps33)
 
         eps_eq = torch.sqrt(
-            eps_t**2 +
+            eps22_pos**2 +
+            eps33_pos**2 +
             gam12**2 +
             gam13**2 +
             gam23**2
@@ -2515,23 +2496,25 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
     def eq_disp_mc(self, eps: torch.Tensor, cl: torch.Tensor) -> torch.Tensor:
         eps22 = eps[..., 1, 1]
         eps33 = eps[..., 2, 2]
-        gam12 = eps[..., 0, 1]
-        gam13 = eps[..., 0, 2]
-        gam23 = eps[..., 1, 2]
+        gam12 = 2.0 * eps[..., 0, 1]
+        gam13 = 2.0 * eps[..., 0, 2]
+        gam23 = 2.0 * eps[..., 1, 2]
 
-        eps_c = torch.relu(-(eps22 + eps33))
+        eps22_neg = torch.relu(-eps22)
+        eps33_neg = torch.relu(-eps33)
 
         eps_eq = torch.sqrt(
-            eps_c**2 +
+            eps22_neg**2 +
+            eps33_neg**2 +
             gam12**2 +
             gam13**2 +
             gam23**2
         )
         return cl * eps_eq
 
-    # ---------------------------------------------------------
-    # Damage evolution laws (Matzenmiller / Abaqus-style)
-    # ---------------------------------------------------------
+    # ============================================================
+    # Damage evolution laws
+    # ============================================================
 
     def damage_law_ft(
         self,
@@ -2543,7 +2526,6 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         G = self.G_ft
 
         eps = 1e-12 * (delta_0.abs() + 1.0)
-
         delta_f = 2.0 * G / (Xt + eps)
 
         active = (delta_max >= delta_0) & (
@@ -2554,7 +2536,6 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
 
         d = num / (den + eps)
         d = torch.where(active, d, torch.zeros_like(d))
-
         return torch.clamp(d, 0.0, 0.99)
 
     def damage_law_fc(
@@ -2567,7 +2548,6 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         G = self.G_fc
 
         eps = 1e-12 * (delta_0.abs() + 1.0)
-
         delta_f = 2.0 * G / (Xc + eps)
 
         active = (delta_max >= delta_0) & (
@@ -2578,7 +2558,6 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
 
         d = num / (den + eps)
         d = torch.where(active, d, torch.zeros_like(d))
-
         return torch.clamp(d, 0.0, 0.99)
 
     def damage_law_mt(
@@ -2591,17 +2570,16 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         G = self.G_mt
 
         eps = 1e-12 * (delta_0.abs() + 1.0)
-
         delta_f = 2.0 * G / (Yt + eps)
 
-        active = (delta_max >= delta_0) & (delta_f > delta_0 + eps)
+        active = (delta_max >= delta_0) & (
+            f_mt >= 1.0) & (delta_f > delta_0 + eps)
 
         num = delta_f * (delta_max - delta_0)
         den = delta_max * (delta_f - delta_0 + eps)
 
         d = num / (den + eps)
         d = torch.where(active, d, torch.zeros_like(d))
-
         return torch.clamp(d, 0.0, 0.99)
 
     def damage_law_mc(
@@ -2614,7 +2592,6 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         G = self.G_mc
 
         eps = 1e-12 * (delta_0.abs() + 1.0)
-
         delta_f = 2.0 * G / (Yc + eps)
 
         active = (delta_max >= delta_0) & (
@@ -2625,12 +2602,11 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
 
         d = num / (den + eps)
         d = torch.where(active, d, torch.zeros_like(d))
-
         return torch.clamp(d, 0.0, 0.99)
 
-    # ---------------------------------------------------------
-    # Build damaged stiffness tensor (MLT-like)
-    # ---------------------------------------------------------
+    # ============================================================
+    # Damaged stiffness
+    # ============================================================
 
     def build_damaged_stiffness(
         self,
@@ -2638,25 +2614,20 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         d_m: torch.Tensor,
         d_s: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """
-        Direction-dependent damaged stiffness.
-
-        d_f : fiber damage   -> mainly longitudinal direction (11) and related couplings
-        d_m : matrix damage  -> mainly transverse directions (22, 33) and related couplings
-        d_s : shear damage   -> shear-related terms; if None, use d_m
-        """
         kmin = 1e-12
 
         if d_s is None:
             d_s = d_m
 
-        # retention factors
         kf = torch.clamp(1.0 - d_f, kmin, 1.0)
         km = torch.clamp(1.0 - d_m, kmin, 1.0)
         ks = torch.clamp(1.0 - d_s, kmin, 1.0)
 
-        # mixed retention for coupling terms involving both fiber and matrix directions
-        kfm = torch.sqrt(kf * km)
+        # unified mixed degradation:
+        # - pure fiber damage  -> behaves like kf
+        # - pure matrix damage -> behaves like km
+        # - mixed damage       -> takes the stronger degradation
+        kfm = torch.minimum(kf, km)
 
         C0 = self.C
         C_d = C0.clone()
@@ -2670,6 +2641,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
 
         # ---------------------------------------------------------
         # normal coupling terms
+        # terms involving direction 1 and matrix directions use kfm
         # ---------------------------------------------------------
         C_d[..., 0, 0, 1, 1] = kfm * C0[..., 0, 0, 1, 1]
         C_d[..., 1, 1, 0, 0] = kfm * C0[..., 1, 1, 0, 0]
@@ -2681,9 +2653,9 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         C_d[..., 2, 2, 1, 1] = km * C0[..., 2, 2, 1, 1]
 
         # ---------------------------------------------------------
-        # shear terms:
-        # 12, 13 -> influenced by fiber + matrix
-        # 23     -> mostly matrix/shear
+        # shear terms
+        # 12 and 13 are affected by both fiber and matrix damage
+        # 23 mainly by matrix/shear damage
         # ---------------------------------------------------------
         C_d[..., 0, 1, 0, 1] = kfm * C0[..., 0, 1, 0, 1]
         C_d[..., 1, 0, 1, 0] = kfm * C0[..., 1, 0, 1, 0]
