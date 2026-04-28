@@ -2163,7 +2163,8 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
     (Hashin-type initiation + Abaqus-like linear softening).
 
     State variables:
-    [delta_ft_max, d_ft, delta_fc_max, d_fc, delta_mt_max, d_mt, delta_mc_max, d_mc]
+    [delta_ft_max, d_ft, delta_fc_max, d_fc,
+        delta_mt_max, d_mt, delta_mc_max, d_mc]
     """
 
     def __init__(
@@ -2627,7 +2628,9 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         # - pure fiber damage  -> behaves like kf
         # - pure matrix damage -> behaves like km
         # - mixed damage       -> takes the stronger degradation
-        kfm = torch.minimum(kf, km)
+        #  kfm = torch.minimum(kf, km)
+
+        kfm = kf * km
 
         C0 = self.C
         C_d = C0.clone()
