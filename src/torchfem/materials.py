@@ -2380,11 +2380,17 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         d_f = torch.where(sig11 >= 0, d_ft_new, d_fc_new)
         d_m = torch.where(sig_t2 >= 0, d_mt_new, d_mc_new)
 
-        # In-plane shear (12/13) is degraded by both fiber and matrix
-        # cracking; transverse shear (23) is matrix-dominated only.
-        d_s12 = 1.0 - (1.0 - d_f) * (1.0 - d_m)
+        # Shear damage accumulates all modes monotonically (Abaqus/Hashin
+        # convention): once shear stiffness is lost to any cracking mode it must
+        # not recover when the normal load reverses. Building d_s from the
+        # sign-active pair (d_f, d_m) instead would let the shear modulus spring
+        # back on reversal, which is unphysical. In-plane shear (12/13) sees all
+        # four modes; transverse shear (23) is matrix-dominated.
+        d_s12 = 1.0 - (1.0 - d_ft_new) * (1.0 - d_fc_new) * (
+            1.0 - d_mt_new
+        ) * (1.0 - d_mc_new)
         d_s13 = d_s12
-        d_s23 = d_m
+        d_s23 = 1.0 - (1.0 - d_mt_new) * (1.0 - d_mc_new)
 
         C_d = self.build_damaged_stiffness(d_f, d_m, d_s12, d_s13, d_s23)
 
