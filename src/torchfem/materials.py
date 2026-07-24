@@ -2380,12 +2380,23 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         d_mc_new = d_mc_prev + alpha_mc * (d_target_mc - d_mc_prev)
         d_mc_new = torch.clamp(d_mc_new, 0.0, 0.99)
 
-        # effective damages
-        d_f = torch.maximum(d_ft_new, d_fc_new)
-        d_m = torch.maximum(d_mt_new, d_mc_new)
-        d_s = d_m
+        # Active fiber/matrix damage depends on the *sign* of the driving
+        # stress (Camanho-Davila / Abaqus convention), not on max(d_t, d_c):
+        # a specimen damaged in tension must keep its full compressive
+        # stiffness (and vice versa) once the load reverses.
+        sig11 = sigma_hat[..., 0, 0]
+        sig_t2 = sigma_hat[..., 1, 1] + sigma_hat[..., 2, 2]
 
-        C_d = self.build_damaged_stiffness(d_f, d_m, d_s)
+        d_f = torch.where(sig11 >= 0, d_ft_new, d_fc_new)
+        d_m = torch.where(sig_t2 >= 0, d_mt_new, d_mc_new)
+
+        # In-plane shear (12/13) is degraded by both fiber and matrix
+        # cracking; transverse shear (23) is matrix-dominated only.
+        d_s12 = 1.0 - (1.0 - d_f) * (1.0 - d_m)
+        d_s13 = d_s12
+        d_s23 = d_m
+
+        C_d = self.build_damaged_stiffness(d_f, d_m, d_s12, d_s13, d_s23)
 
         sigma_new = torch.einsum("...ijkl,...kl->...ij", C_d, eps_new - de0)
 
@@ -2613,66 +2624,80 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         self,
         d_f: torch.Tensor,
         d_m: torch.Tensor,
-        d_s: torch.Tensor | None = None,
+        d_s12: torch.Tensor,
+        d_s13: torch.Tensor,
+        d_s23: torch.Tensor,
     ) -> torch.Tensor:
-        kmin = 1e-12
+        """
+        Assemble the damaged stiffness by degrading the *compliance* and
+        re-inverting it (Camanho-Davila / Lapczyk-Hurtado formulation, the
+        same one used by Abaqus' built-in Hashin damage model), rather than
+        scaling the stiffness tensor entries directly.
 
-        if d_s is None:
-            d_s = d_m
+        Only the direct (axial) compliance terms 1/E_i are reduced by
+        damage; the Poisson (off-diagonal) compliance terms are left
+        untouched. Re-inverting the 3x3 normal block then automatically
+        produces the correct, coupled reduction of *all* normal stiffness
+        terms -- including the 1/D re-normalization familiar from the
+        Abaqus lamina formula -- which a naive entry-wise scaling of C
+        cannot reproduce (it under/over-estimates stiffness by >15% already
+        at 50% damage for typical Poisson ratios).
+        """
+        kmin = 1e-9
+        d_f = torch.clamp(d_f, 0.0, 1.0 - kmin)
+        d_m = torch.clamp(d_m, 0.0, 1.0 - kmin)
 
-        kf = torch.clamp(1.0 - d_f, kmin, 1.0)
-        km = torch.clamp(1.0 - d_m, kmin, 1.0)
-        ks = torch.clamp(1.0 - d_s, kmin, 1.0)
+        S11 = 1.0 / ((1.0 - d_f) * self.E_1)
+        S22 = 1.0 / ((1.0 - d_m) * self.E_2)
+        S33 = 1.0 / ((1.0 - d_m) * self.E_3)
+        S12 = -self.nu_12 / self.E_1
+        S13 = -self.nu_13 / self.E_1
+        S23 = -self.nu_23 / self.E_2
 
-        # unified mixed degradation:
-        # - pure fiber damage  -> behaves like kf
-        # - pure matrix damage -> behaves like km
-        # - mixed damage       -> takes the stronger degradation
-        #  kfm = torch.minimum(kf, km)
+        S11, S22, S33, S12, S13, S23 = torch.broadcast_tensors(
+            S11, S22, S33, S12, S13, S23
+        )
+        batch_shape = S11.shape
 
-        kfm = kf * km
+        S = torch.zeros(*batch_shape, 3, 3, dtype=S11.dtype, device=S11.device)
+        S[..., 0, 0] = S11
+        S[..., 1, 1] = S22
+        S[..., 2, 2] = S33
+        S[..., 0, 1] = S12
+        S[..., 1, 0] = S12
+        S[..., 0, 2] = S13
+        S[..., 2, 0] = S13
+        S[..., 1, 2] = S23
+        S[..., 2, 1] = S23
 
-        C0 = self.C
-        C_d = C0.clone()
+        # Batched 3x3 inversion of the normal (axial) block
+        C33 = torch.linalg.inv(S)
 
-        # ---------------------------------------------------------
-        # normal stiffness terms
-        # ---------------------------------------------------------
-        C_d[..., 0, 0, 0, 0] = kf * C0[..., 0, 0, 0, 0]
-        C_d[..., 1, 1, 1, 1] = km * C0[..., 1, 1, 1, 1]
-        C_d[..., 2, 2, 2, 2] = km * C0[..., 2, 2, 2, 2]
+        G12_d = (1.0 - d_s12) * self.G_12
+        G13_d = (1.0 - d_s13) * self.G_13
+        G23_d = (1.0 - d_s23) * self.G_23
+        G12_d, G13_d, G23_d = torch.broadcast_tensors(G12_d, G13_d, G23_d)
 
-        # ---------------------------------------------------------
-        # normal coupling terms
-        # terms involving direction 1 and matrix directions use kfm
-        # ---------------------------------------------------------
-        C_d[..., 0, 0, 1, 1] = kfm * C0[..., 0, 0, 1, 1]
-        C_d[..., 1, 1, 0, 0] = kfm * C0[..., 1, 1, 0, 0]
+        C_d = torch.zeros(
+            *batch_shape, 3, 3, 3, 3, dtype=S11.dtype, device=S11.device
+        )
+        for i in range(3):
+            for j in range(3):
+                C_d[..., i, i, j, j] = C33[..., i, j]
 
-        C_d[..., 0, 0, 2, 2] = kfm * C0[..., 0, 0, 2, 2]
-        C_d[..., 2, 2, 0, 0] = kfm * C0[..., 2, 2, 0, 0]
+        C_d[..., 0, 1, 0, 1] = G12_d
+        C_d[..., 1, 0, 1, 0] = G12_d
+        C_d[..., 0, 1, 1, 0] = G12_d
+        C_d[..., 1, 0, 0, 1] = G12_d
 
-        C_d[..., 1, 1, 2, 2] = km * C0[..., 1, 1, 2, 2]
-        C_d[..., 2, 2, 1, 1] = km * C0[..., 2, 2, 1, 1]
+        C_d[..., 0, 2, 0, 2] = G13_d
+        C_d[..., 2, 0, 2, 0] = G13_d
+        C_d[..., 0, 2, 2, 0] = G13_d
+        C_d[..., 2, 0, 0, 2] = G13_d
 
-        # ---------------------------------------------------------
-        # shear terms
-        # 12 and 13 are affected by both fiber and matrix damage
-        # 23 mainly by matrix/shear damage
-        # ---------------------------------------------------------
-        C_d[..., 0, 1, 0, 1] = kfm * C0[..., 0, 1, 0, 1]
-        C_d[..., 1, 0, 1, 0] = kfm * C0[..., 1, 0, 1, 0]
-        C_d[..., 0, 1, 1, 0] = kfm * C0[..., 0, 1, 1, 0]
-        C_d[..., 1, 0, 0, 1] = kfm * C0[..., 1, 0, 0, 1]
-
-        C_d[..., 0, 2, 0, 2] = kfm * C0[..., 0, 2, 0, 2]
-        C_d[..., 2, 0, 2, 0] = kfm * C0[..., 2, 0, 2, 0]
-        C_d[..., 0, 2, 2, 0] = kfm * C0[..., 0, 2, 2, 0]
-        C_d[..., 2, 0, 0, 2] = kfm * C0[..., 2, 0, 0, 2]
-
-        C_d[..., 1, 2, 1, 2] = ks * C0[..., 1, 2, 1, 2]
-        C_d[..., 2, 1, 2, 1] = ks * C0[..., 2, 1, 2, 1]
-        C_d[..., 1, 2, 2, 1] = ks * C0[..., 1, 2, 2, 1]
-        C_d[..., 2, 1, 1, 2] = ks * C0[..., 2, 1, 1, 2]
+        C_d[..., 1, 2, 1, 2] = G23_d
+        C_d[..., 2, 1, 2, 1] = G23_d
+        C_d[..., 1, 2, 2, 1] = G23_d
+        C_d[..., 2, 1, 1, 2] = G23_d
 
         return C_d
