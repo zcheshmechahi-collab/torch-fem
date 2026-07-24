@@ -2192,21 +2192,15 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         G_fc=None,
         G_mt=None,
         G_mc=None,
-        # viscosity-like regularization
-        eta_ft=None,
-        eta_fc=None,
-        eta_mt=None,
-        eta_mc=None,
+        # viscous (Duvaut-Lions) regularization, shared by all four modes
+        eta=None,
         # optional legacy params
         p_ft=None,
         k_res_ft=None,
         # pseudo-time step for damage update
         dt_damage=1.0,
     ):
-        self.eta_ft = float(eta_ft) if eta_ft is not None else 0.0
-        self.eta_fc = float(eta_fc) if eta_fc is not None else 0.0
-        self.eta_mt = float(eta_mt) if eta_mt is not None else 0.0
-        self.eta_mc = float(eta_mc) if eta_mc is not None else 0.0
+        self.eta = float(eta) if eta is not None else 0.0
 
         self.p_ft = p_ft if p_ft is not None else 1.0
         self.k_res_ft = k_res_ft if k_res_ft is not None else 0.0
@@ -2278,10 +2272,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
             G_fc=broadcast(self.G_fc),
             G_mt=broadcast(self.G_mt),
             G_mc=broadcast(self.G_mc),
-            eta_ft=self.eta_ft,
-            eta_fc=self.eta_fc,
-            eta_mt=self.eta_mt,
-            eta_mc=self.eta_mc,
+            eta=self.eta,
             p_ft=self.p_ft,
             k_res_ft=self.k_res_ft,
             dt_damage=self.dt_damage,
@@ -2320,6 +2311,9 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
 
         sigma_hat = torch.einsum("...ijkl,...kl->...ij", self.C, eps_new - de0)
 
+        # Single viscous (Duvaut-Lions) update factor shared by all four modes.
+        alpha = self.dt_damage / (self.eta + self.dt_damage)
+
         # ---------------- FT ----------------
         f_ft = self.hashin_ft(sigma_hat)
         delta_ft = self.eq_disp_ft(eps_new, cl)
@@ -2331,8 +2325,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         d_target_ft = self.damage_law_ft(delta_ft_max_new, delta_0_ft, f_ft)
         d_target_ft = torch.maximum(d_ft_prev, d_target_ft)
 
-        alpha_ft = self.dt_damage / (self.eta_ft + self.dt_damage)
-        d_ft_new = d_ft_prev + alpha_ft * (d_target_ft - d_ft_prev)
+        d_ft_new = d_ft_prev + alpha * (d_target_ft - d_ft_prev)
         d_ft_new = torch.clamp(d_ft_new, 0.0, 0.99)
 
         # ---------------- FC ----------------
@@ -2346,8 +2339,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         d_target_fc = self.damage_law_fc(delta_fc_max_new, delta_0_fc, f_fc)
         d_target_fc = torch.maximum(d_fc_prev, d_target_fc)
 
-        alpha_fc = self.dt_damage / (self.eta_fc + self.dt_damage)
-        d_fc_new = d_fc_prev + alpha_fc * (d_target_fc - d_fc_prev)
+        d_fc_new = d_fc_prev + alpha * (d_target_fc - d_fc_prev)
         d_fc_new = torch.clamp(d_fc_new, 0.0, 0.99)
 
         # ---------------- MT ----------------
@@ -2361,8 +2353,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         d_target_mt = self.damage_law_mt(delta_mt_max_new, delta_0_mt, f_mt)
         d_target_mt = torch.maximum(d_mt_prev, d_target_mt)
 
-        alpha_mt = self.dt_damage / (self.eta_mt + self.dt_damage)
-        d_mt_new = d_mt_prev + alpha_mt * (d_target_mt - d_mt_prev)
+        d_mt_new = d_mt_prev + alpha * (d_target_mt - d_mt_prev)
         d_mt_new = torch.clamp(d_mt_new, 0.0, 0.99)
 
         # ---------------- MC ----------------
@@ -2376,8 +2367,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         d_target_mc = self.damage_law_mc(delta_mc_max_new, delta_0_mc, f_mc)
         d_target_mc = torch.maximum(d_mc_prev, d_target_mc)
 
-        alpha_mc = self.dt_damage / (self.eta_mc + self.dt_damage)
-        d_mc_new = d_mc_prev + alpha_mc * (d_target_mc - d_mc_prev)
+        d_mc_new = d_mc_prev + alpha * (d_target_mc - d_mc_prev)
         d_mc_new = torch.clamp(d_mc_new, 0.0, 0.99)
 
         # Active fiber/matrix damage depends on the *sign* of the driving
