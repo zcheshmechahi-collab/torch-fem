@@ -2162,16 +2162,10 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         G_mc=None,
         # viscous (Duvaut-Lions) regularization, shared by all four modes
         eta=None,
-        # optional legacy params
-        p_ft=None,
-        k_res_ft=None,
         # pseudo-time step for damage update
         dt_damage=1.0,
     ):
         self.eta = float(eta) if eta is not None else 0.0
-
-        self.p_ft = p_ft if p_ft is not None else 1.0
-        self.k_res_ft = k_res_ft if k_res_ft is not None else 0.0
         self.dt_damage = float(dt_damage)
 
         super().__init__(
@@ -2241,8 +2235,6 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
             G_mt=broadcast(self.G_mt),
             G_mc=broadcast(self.G_mc),
             eta=self.eta,
-            p_ft=self.p_ft,
-            k_res_ft=self.k_res_ft,
             dt_damage=self.dt_damage,
         )
 
@@ -2282,61 +2274,20 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         # Single viscous (Duvaut-Lions) update factor shared by all four modes.
         alpha = self.dt_damage / (self.eta + self.dt_damage)
 
-        # ---------------- FT ----------------
-        f_ft = self.hashin_ft(sigma_hat)
-        delta_ft = self.eq_disp_ft(eps_new, cl)
-        delta_ft_max_new = torch.maximum(delta_ft_max, delta_ft)
-
-        eps0_ft = self.Xt / self.E_1
-        delta_0_ft = cl * eps0_ft
-
-        d_target_ft = self.damage_law_ft(delta_ft_max_new, delta_0_ft, f_ft)
-        d_target_ft = torch.maximum(d_ft_prev, d_target_ft)
-
-        d_ft_new = d_ft_prev + alpha * (d_target_ft - d_ft_prev)
-        d_ft_new = torch.clamp(d_ft_new, 0.0, 0.99)
-
-        # ---------------- FC ----------------
-        f_fc = self.hashin_fc(sigma_hat)
-        delta_fc = self.eq_disp_fc(eps_new, cl)
-        delta_fc_max_new = torch.maximum(delta_fc_max, delta_fc)
-
-        eps0_fc = self.Xc / self.E_1
-        delta_0_fc = cl * eps0_fc
-
-        d_target_fc = self.damage_law_fc(delta_fc_max_new, delta_0_fc, f_fc)
-        d_target_fc = torch.maximum(d_fc_prev, d_target_fc)
-
-        d_fc_new = d_fc_prev + alpha * (d_target_fc - d_fc_prev)
-        d_fc_new = torch.clamp(d_fc_new, 0.0, 0.99)
-
-        # ---------------- MT ----------------
-        f_mt = self.hashin_mt(sigma_hat)
-        delta_mt = self.eq_disp_mt(eps_new, cl)
-        delta_mt_max_new = torch.maximum(delta_mt_max, delta_mt)
-
-        eps0_mt = self.Yt / self.E_2
-        delta_0_mt = cl * eps0_mt
-
-        d_target_mt = self.damage_law_mt(delta_mt_max_new, delta_0_mt, f_mt)
-        d_target_mt = torch.maximum(d_mt_prev, d_target_mt)
-
-        d_mt_new = d_mt_prev + alpha * (d_target_mt - d_mt_prev)
-        d_mt_new = torch.clamp(d_mt_new, 0.0, 0.99)
-
-        # ---------------- MC ----------------
-        f_mc = self.hashin_mc(sigma_hat)
-        delta_mc = self.eq_disp_mc(eps_new, cl)
-        delta_mc_max_new = torch.maximum(delta_mc_max, delta_mc)
-
-        eps0_mc = self.Yc / self.E_2
-        delta_0_mc = cl * eps0_mc
-
-        d_target_mc = self.damage_law_mc(delta_mc_max_new, delta_0_mc, f_mc)
-        d_target_mc = torch.maximum(d_mc_prev, d_target_mc)
-
-        d_mc_new = d_mc_prev + alpha * (d_target_mc - d_mc_prev)
-        d_mc_new = torch.clamp(d_mc_new, 0.0, 0.99)
+        # Per-mode Hashin initiation + linear softening + Duvaut-Lions update.
+        # Each mode: (kind, tension, strength, axial modulus, fracture energy,
+        # previous delta_max, previous damage).
+        modes = [
+            ("fiber", True, self.Xt, self.E_1, self.G_ft, delta_ft_max, d_ft_prev),
+            ("fiber", False, self.Xc, self.E_1, self.G_fc, delta_fc_max, d_fc_prev),
+            ("matrix", True, self.Yt, self.E_2, self.G_mt, delta_mt_max, d_mt_prev),
+            ("matrix", False, self.Yc, self.E_2, self.G_mc, delta_mc_max, d_mc_prev),
+        ]
+        out = [self.damage_update(m, sigma_hat, eps_new, cl, alpha) for m in modes]
+        (f_ft, delta_ft, delta_ft_max_new, delta_0_ft, d_ft_new) = out[0]
+        (f_fc, delta_fc, delta_fc_max_new, delta_0_fc, d_fc_new) = out[1]
+        (f_mt, delta_mt, delta_mt_max_new, delta_0_mt, d_mt_new) = out[2]
+        (f_mc, delta_mc, delta_mc_max_new, delta_0_mc, d_mc_new) = out[3]
 
         # Active fiber/matrix damage depends on the *sign* of the driving
         # stress (Camanho-Davila / Abaqus convention), not on max(d_t, d_c):
@@ -2360,7 +2311,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         d_s13 = d_s12
         d_s23 = 1.0 - (1.0 - d_mt_new) * (1.0 - d_mc_new)
 
-        C_d = self.build_damaged_stiffness(d_f, d_m, d_s12, d_s13, d_s23)
+        C_d, C33 = self.build_damaged_stiffness(d_f, d_m, d_s12, d_s13, d_s23)
 
         sigma_new = torch.einsum("...ijkl,...kl->...ij", C_d, eps_new - de0)
 
@@ -2389,11 +2340,8 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         def bc(x):  # broadcast a scalar field (...) to (..., 1, 1)
             return x.unsqueeze(-1).unsqueeze(-1)
 
-        # Normal-block inverse C33 (sigma_ii = C33_ij eps_jj) and its columns.
-        C33 = torch.zeros(*e.shape[:-2], 3, 3, dtype=dtype, device=e.device)
-        for a in range(3):
-            for b in range(3):
-                C33[..., a, b] = C_d[..., a, a, b, b]
+        # Normal-block inverse C33 (sigma_ii = C33_ij eps_jj), reused from
+        # build_damaged_stiffness, and its columns.
         c0, c1, c2 = C33[..., :, 0], C33[..., :, 1], C33[..., :, 2]
         e_n = torch.stack([e[..., 0, 0], e[..., 1, 1], e[..., 2, 2]], dim=-1)
         c0e = (c0 * e_n).sum(-1)
@@ -2518,190 +2466,110 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         return sigma_new, state_new, ddsdde
 
     # ============================================================
+    # Per-mode damage update (Hashin initiation + linear softening)
+    # ============================================================
+
+    def damage_update(self, spec, sigma_hat, eps, cl, alpha):
+        """Failure index, equivalent displacement and updated damage for one mode.
+
+        `spec` is ``(kind, tension, strength, modulus, G, delta_max, d_prev)``:
+        `kind` selects the fiber/matrix criteria, `tension` the tensile/compressive
+        branch. Returns ``(f, delta, delta_max_new, delta_0, d_new)``.
+        """
+        kind, tension, strength, modulus, G, delta_max, d_prev = spec
+
+        if kind == "fiber":
+            f = self.hashin_fiber(sigma_hat, strength, tension)
+            delta = self.eq_disp_fiber(eps, cl, tension)
+        else:
+            f = self.hashin_matrix(sigma_hat, strength, tension)
+            delta = self.eq_disp_matrix(eps, cl, tension)
+
+        delta_max_new = torch.maximum(delta_max, delta)
+        delta_0 = cl * strength / modulus
+
+        d_target = torch.maximum(
+            d_prev, self.damage_law(delta_max_new, delta_0, f, strength, G)
+        )
+        d_new = torch.clamp(d_prev + alpha * (d_target - d_prev), 0.0, 0.99)
+        return f, delta, delta_max_new, delta_0, d_new
+
+    # ============================================================
     # Hashin criteria
     # ============================================================
 
-    def hashin_ft(self, sigma_hat: torch.Tensor) -> torch.Tensor:
+    def hashin_fiber(self, sigma_hat, strength, tension):
+        """Fiber failure index. Tension adds the in-plane shear terms; each branch
+        is gated on the sign of the fiber-direction stress."""
         sig11 = sigma_hat[..., 0, 0]
-        tau12 = sigma_hat[..., 0, 1]
-        tau13 = sigma_hat[..., 0, 2]
+        if tension:
+            tau12 = sigma_hat[..., 0, 1]
+            tau13 = sigma_hat[..., 0, 2]
+            f = (
+                (sig11 / strength) ** 2
+                + (tau12 / self.S12) ** 2
+                + (tau13 / self.S13) ** 2
+            )
+            return torch.where(sig11 > 0, f, torch.zeros_like(f))
+        f = (sig11 / strength) ** 2
+        return torch.where(sig11 < 0, f, torch.zeros_like(f))
 
-        f = (sig11 / self.Xt) ** 2 + (tau12 / self.S12) ** 2 + (tau13 / self.S13) ** 2
-
-        f = torch.where(sig11 > 0, f, torch.zeros_like(f))
-        return f
-
-    def hashin_fc(self, sigma_hat: torch.Tensor) -> torch.Tensor:
-        sig11 = sigma_hat[..., 0, 0]
-
-        f = (sig11 / self.Xc) ** 2
-        f = torch.where(sig11 < 0, f, torch.zeros_like(f))
-        return f
-
-    def hashin_mt(self, sigma_hat: torch.Tensor) -> torch.Tensor:
+    def hashin_matrix(self, sigma_hat, strength, tension):
+        """Matrix failure index. `tension` picks the positive/negative part of the
+        transverse normal stresses; the shear terms are common to both branches."""
         sig22 = sigma_hat[..., 1, 1]
         sig33 = sigma_hat[..., 2, 2]
         tau12 = sigma_hat[..., 0, 1]
         tau13 = sigma_hat[..., 0, 2]
         tau23 = sigma_hat[..., 1, 2]
-
-        sig22_pos = torch.relu(sig22)
-        sig33_pos = torch.relu(sig33)
-
-        sig_t = torch.sqrt(sig22_pos**2 + sig33_pos**2)
-
-        f = (
-            (sig_t / self.Yt) ** 2
+        if tension:
+            sig_n = torch.sqrt(torch.relu(sig22) ** 2 + torch.relu(sig33) ** 2)
+        else:
+            sig_n = torch.sqrt(torch.relu(-sig22) ** 2 + torch.relu(-sig33) ** 2)
+        return (
+            (sig_n / strength) ** 2
             + (tau12 / self.S12) ** 2
             + (tau13 / self.S13) ** 2
             + (tau23 / self.S23) ** 2
         )
-
-        return f
-
-    def hashin_mc(self, sigma_hat: torch.Tensor) -> torch.Tensor:
-        sig22 = sigma_hat[..., 1, 1]
-        sig33 = sigma_hat[..., 2, 2]
-        tau12 = sigma_hat[..., 0, 1]
-        tau13 = sigma_hat[..., 0, 2]
-        tau23 = sigma_hat[..., 1, 2]
-
-        sig22_neg = torch.relu(-sig22)
-        sig33_neg = torch.relu(-sig33)
-
-        sig_c = torch.sqrt(sig22_neg**2 + sig33_neg**2)
-
-        f = (
-            (sig_c / self.Yc) ** 2
-            + (tau12 / self.S12) ** 2
-            + (tau13 / self.S13) ** 2
-            + (tau23 / self.S23) ** 2
-        )
-
-        return f
 
     # ============================================================
     # Equivalent displacement
     # ============================================================
 
-    def eq_disp_ft(self, eps: torch.Tensor, cl: torch.Tensor) -> torch.Tensor:
-        eps11_pos = torch.relu(eps[..., 0, 0])
-        return cl * eps11_pos
+    def eq_disp_fiber(self, eps, cl, tension):
+        eps11 = eps[..., 0, 0]
+        eps11 = torch.relu(eps11) if tension else torch.relu(-eps11)
+        return cl * eps11
 
-    def eq_disp_fc(self, eps: torch.Tensor, cl: torch.Tensor) -> torch.Tensor:
-        eps11_neg = torch.relu(-eps[..., 0, 0])
-        return cl * eps11_neg
-
-    def eq_disp_mt(self, eps: torch.Tensor, cl: torch.Tensor) -> torch.Tensor:
+    def eq_disp_matrix(self, eps, cl, tension):
         eps22 = eps[..., 1, 1]
         eps33 = eps[..., 2, 2]
         gam12 = 2.0 * eps[..., 0, 1]
         gam13 = 2.0 * eps[..., 0, 2]
         gam23 = 2.0 * eps[..., 1, 2]
-
-        eps22_pos = torch.relu(eps22)
-        eps33_pos = torch.relu(eps33)
-
-        eps_eq = torch.sqrt(
-            eps22_pos**2 + eps33_pos**2 + gam12**2 + gam13**2 + gam23**2
-        )
-        return cl * eps_eq
-
-    def eq_disp_mc(self, eps: torch.Tensor, cl: torch.Tensor) -> torch.Tensor:
-        eps22 = eps[..., 1, 1]
-        eps33 = eps[..., 2, 2]
-        gam12 = 2.0 * eps[..., 0, 1]
-        gam13 = 2.0 * eps[..., 0, 2]
-        gam23 = 2.0 * eps[..., 1, 2]
-
-        eps22_neg = torch.relu(-eps22)
-        eps33_neg = torch.relu(-eps33)
-
-        eps_eq = torch.sqrt(
-            eps22_neg**2 + eps33_neg**2 + gam12**2 + gam13**2 + gam23**2
-        )
+        if tension:
+            n22, n33 = torch.relu(eps22), torch.relu(eps33)
+        else:
+            n22, n33 = torch.relu(-eps22), torch.relu(-eps33)
+        eps_eq = torch.sqrt(n22**2 + n33**2 + gam12**2 + gam13**2 + gam23**2)
         return cl * eps_eq
 
     # ============================================================
     # Damage evolution laws
     # ============================================================
 
-    def damage_law_ft(
-        self,
-        delta_max: torch.Tensor,
-        delta_0: torch.Tensor,
-        f_ft: torch.Tensor,
-    ) -> torch.Tensor:
-        Xt = self.Xt
-        G = self.G_ft
+    def damage_law(self, delta_max, delta_0, f, strength, G):
+        """Bilinear (linear-softening) damage, shared by all four modes.
 
+        ``d = delta_f (delta_max - delta_0) / (delta_max (delta_f - delta_0))``,
+        active only once the criterion is met (``f >= 1``) and the equivalent
+        displacement has passed the onset value ``delta_0``.
+        """
         eps = 1e-12 * (delta_0.abs() + 1.0)
-        delta_f = 2.0 * G / (Xt + eps)
+        delta_f = 2.0 * G / (strength + eps)
 
-        active = (delta_max >= delta_0) & (f_ft >= 1.0) & (delta_f > delta_0 + eps)
-
-        num = delta_f * (delta_max - delta_0)
-        den = delta_max * (delta_f - delta_0 + eps)
-
-        d = num / (den + eps)
-        d = torch.where(active, d, torch.zeros_like(d))
-        return torch.clamp(d, 0.0, 0.99)
-
-    def damage_law_fc(
-        self,
-        delta_max: torch.Tensor,
-        delta_0: torch.Tensor,
-        f_fc: torch.Tensor,
-    ) -> torch.Tensor:
-        Xc = self.Xc
-        G = self.G_fc
-
-        eps = 1e-12 * (delta_0.abs() + 1.0)
-        delta_f = 2.0 * G / (Xc + eps)
-
-        active = (delta_max >= delta_0) & (f_fc >= 1.0) & (delta_f > delta_0 + eps)
-
-        num = delta_f * (delta_max - delta_0)
-        den = delta_max * (delta_f - delta_0 + eps)
-
-        d = num / (den + eps)
-        d = torch.where(active, d, torch.zeros_like(d))
-        return torch.clamp(d, 0.0, 0.99)
-
-    def damage_law_mt(
-        self,
-        delta_max: torch.Tensor,
-        delta_0: torch.Tensor,
-        f_mt: torch.Tensor,
-    ) -> torch.Tensor:
-        Yt = self.Yt
-        G = self.G_mt
-
-        eps = 1e-12 * (delta_0.abs() + 1.0)
-        delta_f = 2.0 * G / (Yt + eps)
-
-        active = (delta_max >= delta_0) & (f_mt >= 1.0) & (delta_f > delta_0 + eps)
-
-        num = delta_f * (delta_max - delta_0)
-        den = delta_max * (delta_f - delta_0 + eps)
-
-        d = num / (den + eps)
-        d = torch.where(active, d, torch.zeros_like(d))
-        return torch.clamp(d, 0.0, 0.99)
-
-    def damage_law_mc(
-        self,
-        delta_max: torch.Tensor,
-        delta_0: torch.Tensor,
-        f_mc: torch.Tensor,
-    ) -> torch.Tensor:
-        Yc = self.Yc
-        G = self.G_mc
-
-        eps = 1e-12 * (delta_0.abs() + 1.0)
-        delta_f = 2.0 * G / (Yc + eps)
-
-        active = (delta_max >= delta_0) & (f_mc >= 1.0) & (delta_f > delta_0 + eps)
+        active = (delta_max >= delta_0) & (f >= 1.0) & (delta_f > delta_0 + eps)
 
         num = delta_f * (delta_max - delta_0)
         den = delta_max * (delta_f - delta_0 + eps)
@@ -2792,4 +2660,6 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         C_d[..., 1, 2, 2, 1] = G23_d
         C_d[..., 2, 1, 1, 2] = G23_d
 
-        return C_d
+        # C33 (the inverted normal block) is returned as well so the consistent
+        # tangent in step() can reuse it instead of re-extracting it from C_d.
+        return C_d, C33
