@@ -92,8 +92,7 @@ class IsotropicElasticity3D(Material):
         # Identity tensors
         I2 = torch.eye(3)
         I4 = torch.einsum("ij,kl->ijkl", I2, I2)
-        I4S = torch.einsum("ik,jl->ijkl", I2, I2) + \
-            torch.einsum("il,jk->ijkl", I2, I2)
+        I4S = torch.einsum("ik,jl->ijkl", I2, I2) + torch.einsum("il,jk->ijkl", I2, I2)
 
         # Stiffness tensor
         lbd = self.lbd[..., None, None, None, None]
@@ -164,8 +163,7 @@ class IsotropicElasticity3D(Material):
         # Compute small strain tensor
         de = 0.5 * (H_inc.transpose(-1, -2) + H_inc)
         # Compute new stress
-        sigma_new = sigma + \
-            torch.einsum("...ijkl,...kl->...ij", self.C, de - de0)
+        sigma_new = sigma + torch.einsum("...ijkl,...kl->...ij", self.C, de - de0)
         # Update internal state (this material does not change state)
         state_new = state
         # Algorithmic tangent
@@ -262,8 +260,7 @@ class IsotropicHencky3D(IsotropicElasticity3D):
         # Compute squared principal stretches and stretch directions
         ev, Q = torch.linalg.eigh(C_new)
         # Compute Hencky strain
-        LE_new = 0.5 * \
-            Q @ torch.diag_embed(torch.log(ev)) @ Q.transpose(-1, -2)
+        LE_new = 0.5 * Q @ torch.diag_embed(torch.log(ev)) @ Q.transpose(-1, -2)
         # Compute Cauchy stress
         sigma_new = torch.einsum("...ijkl,...kl->...ij", self.C, LE_new - de0)
         # Update internal state (this material does not change state)
@@ -506,8 +503,7 @@ class IsotropicDamage3D(IsotropicElasticity3D):
         D_prime = self.d_prime(kappa_new, cl)
 
         # Update stress
-        sigma_trial = torch.einsum(
-            "...ijkl,...kl->...ij", self.C, eps_new - de0)
+        sigma_trial = torch.einsum("...ijkl,...kl->...ij", self.C, eps_new - de0)
         sigma_new = (1 - D_new)[:, None, None] * sigma_trial
 
         # Update state variables
@@ -651,12 +647,10 @@ class IsotropicPlasticity3D(IsotropicElasticity3D):
         ddsdde = self.C.clone()
 
         # Compute trial stress
-        s_trial = sigma + \
-            torch.einsum("...ijkl,...kl->...ij", self.C, de - de0)
+        s_trial = sigma + torch.einsum("...ijkl,...kl->...ij", self.C, de - de0)
 
         # Compute the deviatoric trial stress
-        s_trial_trace = s_trial[..., 0, 0] + \
-            s_trial[..., 1, 1] + s_trial[..., 2, 2]
+        s_trial_trace = s_trial[..., 0, 0] + s_trial[..., 1, 1] + s_trial[..., 2, 2]
         dev = s_trial.clone()
         dev[..., 0, 0] -= s_trial_trace / 3
         dev[..., 1, 1] -= s_trial_trace / 3
@@ -675,8 +669,7 @@ class IsotropicPlasticity3D(IsotropicElasticity3D):
         G = self.G[fm]
         for _ in range(self.max_iter):
             res = (
-                dev_norm[fm] - 2.0 * G * dGamma -
-                sqrt(2.0 / 3.0) * self.sigma_f(q[fm])
+                dev_norm[fm] - 2.0 * G * dGamma - sqrt(2.0 / 3.0) * self.sigma_f(q[fm])
             )
             ddGamma = res / (2.0 * G + 2.0 / 3.0 * self.sigma_f_prime(q[fm]))
             dGamma += ddGamma
@@ -702,8 +695,7 @@ class IsotropicPlasticity3D(IsotropicElasticity3D):
         B = 4.0 * G**2 * dGamma / dev_norm[fm]
         I2 = torch.eye(3)
         I4 = torch.einsum("ij,kl->ijkl", I2, I2)
-        I4S = torch.einsum("ik,jl->ijkl", I2, I2) + \
-            torch.einsum("il,jk->ijkl", I2, I2)
+        I4S = torch.einsum("ik,jl->ijkl", I2, I2) + torch.einsum("il,jk->ijkl", I2, I2)
         nn = torch.einsum("...ij,...kl->...ijkl", n, n)
         ddsdde[fm] = (
             self.C[fm]
@@ -953,8 +945,7 @@ class IsotropicHenckyPlaneStress(IsotropicHencky3D):
             # Compute squared principal stretches and stretch directions
             ev, Q = torch.linalg.eigh(C_new)
             # Compute Hencky strain
-            LE_new = 0.5 * \
-                Q @ torch.diag_embed(torch.log(ev)) @ Q.transpose(-1, -2)
+            LE_new = 0.5 * Q @ torch.diag_embed(torch.log(ev)) @ Q.transpose(-1, -2)
             # Compute Cauchy stress
             sigma_trial = torch.einsum("...ijkl,...kl->...ij", self.C, LE_new)
             # Evaluate plane stress condition
@@ -1141,8 +1132,7 @@ class IsotropicPlasticityPlaneStress(IsotropicElasticityPlaneStress):
             # Compute derivative of residual w.r.t dGamma
             H = self.sigma_f_prime(qq)
             xi_p = (
-                -a1[fm] / (9 * (1 + E * dGamma / (3 * (1 - nu)))
-                           ** 3) * E / (1 - nu)
+                -a1[fm] / (9 * (1 + E * dGamma / (3 * (1 - nu))) ** 3) * E / (1 - nu)
                 - 2 * G * (a2[fm] + 4 * a3[fm]) / (1 + 2 * G * dGamma) ** 3
             )
             H_p = (
@@ -1167,16 +1157,14 @@ class IsotropicPlasticityPlaneStress(IsotropicElasticityPlaneStress):
 
         # Update stress
         sigma_new[~fm] = s_trial[~fm]
-        sigma_new[fm] = (inv @ self._S[fm] @ s_trial[fm]
-                         [:, :, None]).squeeze(-1)
+        sigma_new[fm] = (inv @ self._S[fm] @ s_trial[fm][:, :, None]).squeeze(-1)
 
         # Update state
         q[fm] = qq
         state_new[..., 0] = q
 
         # Update algorithmic tangent
-        xi = sigma_new[fm][:, :,
-                           None].transpose(-1, -2) @ P @ sigma_new[fm][:, :, None]
+        xi = sigma_new[fm][:, :, None].transpose(-1, -2) @ P @ sigma_new[fm][:, :, None]
         H = self.sigma_f_prime(q[fm])
         n = inv @ P @ sigma_new[fm][:, :, None]
         alpha = 1.0 / (
@@ -1369,12 +1357,10 @@ class IsotropicPlasticityPlaneStrain(IsotropicElasticityPlaneStrain):
         s_2D = sigma + torch.einsum("...ijkl,...kl->...ij", self.C, de - de0)
         s_trial = torch.zeros(sigma.shape[0], 3, 3)
         s_trial[..., :2, :2] = s_2D
-        s_trial[..., 2, 2] = self.nu * \
-            (s_2D[..., 0, 0] + s_2D[..., 1, 1]) - self.E * ez
+        s_trial[..., 2, 2] = self.nu * (s_2D[..., 0, 0] + s_2D[..., 1, 1]) - self.E * ez
 
         # Compute the deviatoric trial stress
-        s_trial_trace = s_trial[..., 0, 0] + \
-            s_trial[..., 1, 1] + s_trial[..., 2, 2]
+        s_trial_trace = s_trial[..., 0, 0] + s_trial[..., 1, 1] + s_trial[..., 2, 2]
         dev = s_trial.clone()
         dev[..., 0, 0] -= s_trial_trace / 3
         dev[..., 1, 1] -= s_trial_trace / 3
@@ -1393,8 +1379,7 @@ class IsotropicPlasticityPlaneStrain(IsotropicElasticityPlaneStrain):
         G = self.G[fm]
         for _ in range(self.max_iter):
             res = (
-                dev_norm[fm] - 2.0 * G * dGamma -
-                sqrt(2.0 / 3.0) * self.sigma_f(q[fm])
+                dev_norm[fm] - 2.0 * G * dGamma - sqrt(2.0 / 3.0) * self.sigma_f(q[fm])
             )
             ddGamma = res / (2.0 * G + 2.0 / 3.0 * self.sigma_f_prime(q[fm]))
             dGamma += ddGamma
@@ -1423,20 +1408,14 @@ class IsotropicPlasticityPlaneStrain(IsotropicElasticityPlaneStrain):
         A = 2.0 * G / (1.0 + self.sigma_f_prime(q[fm]) / (3.0 * G))
         B = 4.0 * G**2 * dGamma / dev_norm[fm]
         n0n1 = n[:, 0, 0] * n[:, 1, 1]
-        ddsdde[fm, 0, 0, 0, 0] += -A * n[:, 0, 0] ** 2 - \
-            B * (2 / 3 - n[:, 0, 0] ** 2)
-        ddsdde[fm, 1, 1, 1, 1] += -A * n[:, 1, 1] ** 2 - \
-            B * (2 / 3 - n[:, 1, 1] ** 2)
+        ddsdde[fm, 0, 0, 0, 0] += -A * n[:, 0, 0] ** 2 - B * (2 / 3 - n[:, 0, 0] ** 2)
+        ddsdde[fm, 1, 1, 1, 1] += -A * n[:, 1, 1] ** 2 - B * (2 / 3 - n[:, 1, 1] ** 2)
         ddsdde[fm, 0, 0, 1, 1] += -A * n0n1 - B * (-1 / 3 - n0n1)
         ddsdde[fm, 1, 1, 0, 0] += -A * n0n1 - B * (-1 / 3 - n0n1)
-        ddsdde[fm, 0, 1, 0, 1] += -A * n[:, 0, 1] ** 2 - \
-            B * (1 / 2 - n[:, 0, 1] ** 2)
-        ddsdde[fm, 0, 1, 1, 0] += -A * n[:, 0, 1] ** 2 - \
-            B * (1 / 2 - n[:, 1, 0] ** 2)
-        ddsdde[fm, 1, 0, 0, 1] += -A * n[:, 1, 0] ** 2 - \
-            B * (1 / 2 - n[:, 0, 1] ** 2)
-        ddsdde[fm, 1, 0, 1, 0] += -A * n[:, 1, 0] ** 2 - \
-            B * (1 / 2 - n[:, 1, 0] ** 2)
+        ddsdde[fm, 0, 1, 0, 1] += -A * n[:, 0, 1] ** 2 - B * (1 / 2 - n[:, 0, 1] ** 2)
+        ddsdde[fm, 0, 1, 1, 0] += -A * n[:, 0, 1] ** 2 - B * (1 / 2 - n[:, 1, 0] ** 2)
+        ddsdde[fm, 1, 0, 0, 1] += -A * n[:, 1, 0] ** 2 - B * (1 / 2 - n[:, 0, 1] ** 2)
+        ddsdde[fm, 1, 0, 1, 0] += -A * n[:, 1, 0] ** 2 - B * (1 / 2 - n[:, 1, 0] ** 2)
 
         return sigma_new, state_new, ddsdde
 
@@ -1477,8 +1456,7 @@ class IsotropicElasticity1D(Material):
         iter: int,
     ) -> tuple[Tensor, Tensor, Tensor]:
         """Perform a strain increment."""
-        sigma_new = sigma + \
-            torch.einsum("...ijkl,...kl->...ij", self.C, H_inc - de0)
+        sigma_new = sigma + torch.einsum("...ijkl,...kl->...ij", self.C, H_inc - de0)
         state_new = state
         ddsdde = self.C
         return sigma_new, state_new, ddsdde
@@ -1533,8 +1511,7 @@ class IsotropicPlasticity1D(IsotropicElasticity1D):
         ddsdde = self.C.clone()
 
         # Compute trial stress
-        s_trial = sigma + \
-            torch.einsum("...ijkl,...kl->...ij", self.C, H_inc - de0)
+        s_trial = sigma + torch.einsum("...ijkl,...kl->...ij", self.C, H_inc - de0)
         s_norm = torch.abs(s_trial).squeeze()
 
         # Flow potential
@@ -1560,8 +1537,7 @@ class IsotropicPlasticity1D(IsotropicElasticity1D):
 
         # Update stress
         sigma_new[~fm] = s_trial[~fm]
-        sigma_new[fm] = (1.0 - (dGamma * E) / s_norm[fm]
-                         )[:, None, None] * s_trial[fm]
+        sigma_new[fm] = (1.0 - (dGamma * E) / s_norm[fm])[:, None, None] * s_trial[fm]
 
         # Update state
         state_new[..., 0] = q
@@ -1629,14 +1605,11 @@ class OrthotropicElasticity3D(Material):
         self.C[..., 0, 0, 0, 0] = self.E_1 * (1 - self.nu_23 * self.nu_32) * F
         self.C[..., 1, 1, 1, 1] = self.E_2 * (1 - self.nu_13 * self.nu_31) * F
         self.C[..., 2, 2, 2, 2] = self.E_3 * (1 - self.nu_12 * self.nu_21) * F
-        self.C[..., 0, 0, 1, 1] = self.E_1 * \
-            (self.nu_21 + self.nu_31 * self.nu_23) * F
+        self.C[..., 0, 0, 1, 1] = self.E_1 * (self.nu_21 + self.nu_31 * self.nu_23) * F
         self.C[..., 1, 1, 0, 0] = self.C[..., 0, 0, 1, 1]
-        self.C[..., 0, 0, 2, 2] = self.E_1 * \
-            (self.nu_31 + self.nu_21 * self.nu_32) * F
+        self.C[..., 0, 0, 2, 2] = self.E_1 * (self.nu_31 + self.nu_21 * self.nu_32) * F
         self.C[..., 2, 2, 0, 0] = self.C[..., 0, 0, 2, 2]
-        self.C[..., 1, 1, 2, 2] = self.E_2 * \
-            (self.nu_32 + self.nu_12 * self.nu_31) * F
+        self.C[..., 1, 1, 2, 2] = self.E_2 * (self.nu_32 + self.nu_12 * self.nu_31) * F
         self.C[..., 2, 2, 1, 1] = self.C[..., 1, 1, 2, 2]
         self.C[..., 0, 1, 0, 1] = self.G_12
         self.C[..., 1, 0, 1, 0] = self.G_12
@@ -1685,8 +1658,7 @@ class OrthotropicElasticity3D(Material):
         # Compute small strain tensor
         de = 0.5 * (H_inc.transpose(-1, -2) + H_inc)
         # Compute new stress
-        sigma_new = sigma + \
-            torch.einsum("...ijkl,...kl->...ij", self.C, de - de0)
+        sigma_new = sigma + torch.einsum("...ijkl,...kl->...ij", self.C, de - de0)
         # Update internal state (this material does not change state)
         state_new = state
         # Algorithmic tangent
@@ -1877,8 +1849,7 @@ class OrthotropicElasticityPlaneStrain(OrthotropicElasticity3D):
         )
         self.C[..., 0, 0, 0, 0] = self.E_1 * (1 - self.nu_23 * self.nu_32) * F
         self.C[..., 1, 1, 1, 1] = self.E_2 * (1 - self.nu_13 * self.nu_31) * F
-        self.C[..., 0, 0, 1, 1] = self.E_1 * \
-            (self.nu_21 + self.nu_31 * self.nu_23) * F
+        self.C[..., 0, 0, 1, 1] = self.E_1 * (self.nu_21 + self.nu_31 * self.nu_23) * F
         self.C[..., 1, 1, 0, 0] = self.C[..., 0, 0, 1, 1]
         self.C[..., 0, 1, 0, 1] = self.G_12
         self.C[..., 1, 0, 1, 0] = self.G_12
@@ -2105,8 +2076,7 @@ class OrthotropicConductivity3D(IsotropicConductivity3D):
             raise ValueError("Rotation matrix must be a 3x3 tensor.")
 
         # compute rotated conductivity tensor
-        self.KAPPA = torch.einsum(
-            "...ik, ...jl, ...kl -> ...ij", R, R, self.KAPPA)
+        self.KAPPA = torch.einsum("...ik, ...jl, ...kl -> ...ij", R, R, self.KAPPA)
         return self
 
 
@@ -2129,8 +2099,7 @@ class OrthotropicConductivity2D(IsotropicConductivity2D):
         P2 = torch.outer(e2, e2)
 
         self.KAPPA = (
-            self.kappa_1[..., None, None] * P1 +
-            self.kappa_2[..., None, None] * P2
+            self.kappa_1[..., None, None] * P1 + self.kappa_2[..., None, None] * P2
         )
 
         self.is_vectorized = self.kappa_1.dim() > 0
@@ -2152,8 +2121,7 @@ class OrthotropicConductivity2D(IsotropicConductivity2D):
             raise ValueError("Rotation matrix must be a 2x2 tensor.")
 
         # compute rotated conductivity tensor
-        self.KAPPA = torch.einsum(
-            "...ik, ...jl, ...kl -> ...ij", R, R, self.KAPPA)
+        self.KAPPA = torch.einsum("...ik, ...jl, ...kl -> ...ij", R, R, self.KAPPA)
         return self
 
 
@@ -2386,9 +2354,9 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         # sign-active pair (d_f, d_m) instead would let the shear modulus spring
         # back on reversal, which is unphysical. In-plane shear (12/13) sees all
         # four modes; transverse shear (23) is matrix-dominated.
-        d_s12 = 1.0 - (1.0 - d_ft_new) * (1.0 - d_fc_new) * (
-            1.0 - d_mt_new
-        ) * (1.0 - d_mc_new)
+        d_s12 = 1.0 - (1.0 - d_ft_new) * (1.0 - d_fc_new) * (1.0 - d_mt_new) * (
+            1.0 - d_mc_new
+        )
         d_s13 = d_s12
         d_s23 = 1.0 - (1.0 - d_mt_new) * (1.0 - d_mc_new)
 
@@ -2406,7 +2374,147 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         state_new[..., 6] = delta_mc_max_new
         state_new[..., 7] = d_mc_new
 
-        ddsdde = C_d
+        # ------------------------------------------------------------------
+        # Consistent (algorithmic) tangent  d(sigma)/d(eps):
+        #
+        #     ddsdde = C_d + sum_k (d sigma / d d_k) (x) (d d_k / d eps)
+        #
+        # The secant C_d is only the first term; the second is the softening
+        # contribution that restores ~quadratic Newton convergence. Derived by
+        # hand below and checked against autodiff in the tests.
+        # ------------------------------------------------------------------
+        dtype = eps_new.dtype
+        e = eps_new - de0
+
+        def bc(x):  # broadcast a scalar field (...) to (..., 1, 1)
+            return x.unsqueeze(-1).unsqueeze(-1)
+
+        # Normal-block inverse C33 (sigma_ii = C33_ij eps_jj) and its columns.
+        C33 = torch.zeros(*e.shape[:-2], 3, 3, dtype=dtype, device=e.device)
+        for a in range(3):
+            for b in range(3):
+                C33[..., a, b] = C_d[..., a, a, b, b]
+        c0, c1, c2 = C33[..., :, 0], C33[..., :, 1], C33[..., :, 2]
+        e_n = torch.stack([e[..., 0, 0], e[..., 1, 1], e[..., 2, 2]], dim=-1)
+        c0e = (c0 * e_n).sum(-1)
+        c1e = (c1 * e_n).sum(-1)
+        c2e = (c2 * e_n).sum(-1)
+
+        # d(sigma)/d(damage) blocks. Normal: dC33/dd = -C33 (dS/dd) C33 is rank-1
+        # in the affected compliance column. Shear: sigma_ab = 2 G_ab(1-d_s) e_ab.
+        dS11 = 1.0 / ((1.0 - d_f) ** 2 * self.E_1)
+        dS22 = 1.0 / ((1.0 - d_m) ** 2 * self.E_2)
+        dS33 = 1.0 / ((1.0 - d_m) ** 2 * self.E_3)
+        Sig_df = torch.diag_embed((-dS11 * c0e).unsqueeze(-1) * c0)
+        Sig_dm = torch.diag_embed(
+            (-dS22 * c1e).unsqueeze(-1) * c1 + (-dS33 * c2e).unsqueeze(-1) * c2
+        )
+        Sig_ds12 = torch.zeros_like(Sig_df)
+        Sig_ds13 = torch.zeros_like(Sig_df)
+        Sig_ds23 = torch.zeros_like(Sig_df)
+        Sig_ds12[..., 0, 1] = -2.0 * self.G_12 * e[..., 0, 1]
+        Sig_ds12[..., 1, 0] = Sig_ds12[..., 0, 1]
+        Sig_ds13[..., 0, 2] = -2.0 * self.G_13 * e[..., 0, 2]
+        Sig_ds13[..., 2, 0] = Sig_ds13[..., 0, 2]
+        Sig_ds23[..., 1, 2] = -2.0 * self.G_23 * e[..., 1, 2]
+        Sig_ds23[..., 2, 1] = Sig_ds23[..., 1, 2]
+
+        # Chain d(d_f, d_m, d_s)/d(d_k) for the four fundamental damage variables.
+        s11p = (sig11 >= 0).to(dtype)
+        st2p = (sig_t2 >= 0).to(dtype)
+        omft, omfc = 1.0 - d_ft_new, 1.0 - d_fc_new
+        ommt, ommc = 1.0 - d_mt_new, 1.0 - d_mc_new
+        Ss = Sig_ds12 + Sig_ds13  # in-plane shear sees all modes (d_s12 == d_s13)
+        T_ft = bc(s11p) * Sig_df + bc(omfc * ommt * ommc) * Ss
+        T_fc = bc(1.0 - s11p) * Sig_df + bc(omft * ommt * ommc) * Ss
+        T_mt = bc(st2p) * Sig_dm + bc(omft * omfc * ommc) * Ss + bc(ommc) * Sig_ds23
+        T_mc = (
+            bc(1.0 - st2p) * Sig_dm + bc(omft * omfc * ommt) * Ss + bc(ommt) * Sig_ds23
+        )
+
+        # d(d_k)/d(eps) = alpha * d(damage_law)/d(delta) * d(delta_eq)/d(eps),
+        # gated to the active + loading + unclamped regime.
+        def dmg_factor(
+            delta_cur, delta_prev, delta_max_new, delta_0, f, strength, Gp, d_new
+        ):
+            delta_f = 2.0 * Gp / strength
+            dl = delta_f * delta_0 / ((delta_f - delta_0) * delta_max_new**2 + 1e-30)
+            active = (delta_max_new >= delta_0) & (f >= 1.0) & (delta_f > delta_0)
+            mask = (
+                active & (delta_cur >= delta_prev) & (d_new > 0.0) & (d_new < 0.99)
+            ).to(dtype)
+            return alpha * dl * mask
+
+        cf_ft = dmg_factor(
+            delta_ft,
+            delta_ft_max,
+            delta_ft_max_new,
+            delta_0_ft,
+            f_ft,
+            self.Xt,
+            self.G_ft,
+            d_ft_new,
+        )
+        cf_fc = dmg_factor(
+            delta_fc,
+            delta_fc_max,
+            delta_fc_max_new,
+            delta_0_fc,
+            f_fc,
+            self.Xc,
+            self.G_fc,
+            d_fc_new,
+        )
+        cf_mt = dmg_factor(
+            delta_mt,
+            delta_mt_max,
+            delta_mt_max_new,
+            delta_0_mt,
+            f_mt,
+            self.Yt,
+            self.G_mt,
+            d_mt_new,
+        )
+        cf_mc = dmg_factor(
+            delta_mc,
+            delta_mc_max,
+            delta_mc_max_new,
+            delta_0_mc,
+            f_mc,
+            self.Yc,
+            self.G_mc,
+            d_mc_new,
+        )
+
+        # d(delta_eq)/d(eps), symmetric. FT/FC axial; MT/MC use engineering shear
+        # (gamma = 2 eps), so off-diagonal entries carry the factor 2.
+        cl2 = cl**2
+        Dmt = delta_mt + 1e-30
+        Dmc = delta_mc + 1e-30
+        gd_ft = torch.zeros_like(Sig_df)
+        gd_fc = torch.zeros_like(Sig_df)
+        gd_mt = torch.zeros_like(Sig_df)
+        gd_mc = torch.zeros_like(Sig_df)
+        gd_ft[..., 0, 0] = cl * (eps_new[..., 0, 0] > 0).to(dtype)
+        gd_fc[..., 0, 0] = -cl * (eps_new[..., 0, 0] < 0).to(dtype)
+        gd_mt[..., 1, 1] = cl2 * torch.relu(eps_new[..., 1, 1]) / Dmt
+        gd_mt[..., 2, 2] = cl2 * torch.relu(eps_new[..., 2, 2]) / Dmt
+        gd_mc[..., 1, 1] = -cl2 * torch.relu(-eps_new[..., 1, 1]) / Dmc
+        gd_mc[..., 2, 2] = -cl2 * torch.relu(-eps_new[..., 2, 2]) / Dmc
+        for a, b in [(0, 1), (0, 2), (1, 2)]:
+            gd_mt[..., a, b] = cl2 * 2.0 * eps_new[..., a, b] / Dmt
+            gd_mt[..., b, a] = gd_mt[..., a, b]
+            gd_mc[..., a, b] = cl2 * 2.0 * eps_new[..., a, b] / Dmc
+            gd_mc[..., b, a] = gd_mc[..., a, b]
+
+        ddsdde = (
+            C_d
+            + torch.einsum("...ij,...kl->...ijkl", T_ft, bc(cf_ft) * gd_ft)
+            + torch.einsum("...ij,...kl->...ijkl", T_fc, bc(cf_fc) * gd_fc)
+            + torch.einsum("...ij,...kl->...ijkl", T_mt, bc(cf_mt) * gd_mt)
+            + torch.einsum("...ij,...kl->...ijkl", T_mc, bc(cf_mc) * gd_mc)
+        )
+
         return sigma_new, state_new, ddsdde
 
     # ============================================================
@@ -2418,9 +2526,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         tau12 = sigma_hat[..., 0, 1]
         tau13 = sigma_hat[..., 0, 2]
 
-        f = (sig11 / self.Xt) ** 2 + \
-            (tau12 / self.S12) ** 2 + \
-            (tau13 / self.S13) ** 2
+        f = (sig11 / self.Xt) ** 2 + (tau12 / self.S12) ** 2 + (tau13 / self.S13) ** 2
 
         f = torch.where(sig11 > 0, f, torch.zeros_like(f))
         return f
@@ -2444,10 +2550,12 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
 
         sig_t = torch.sqrt(sig22_pos**2 + sig33_pos**2)
 
-        f = (sig_t / self.Yt) ** 2 + \
-            (tau12 / self.S12) ** 2 + \
-            (tau13 / self.S13) ** 2 + \
-            (tau23 / self.S23) ** 2
+        f = (
+            (sig_t / self.Yt) ** 2
+            + (tau12 / self.S12) ** 2
+            + (tau13 / self.S13) ** 2
+            + (tau23 / self.S23) ** 2
+        )
 
         return f
 
@@ -2463,10 +2571,12 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
 
         sig_c = torch.sqrt(sig22_neg**2 + sig33_neg**2)
 
-        f = (sig_c / self.Yc) ** 2 + \
-            (tau12 / self.S12) ** 2 + \
-            (tau13 / self.S13) ** 2 + \
-            (tau23 / self.S23) ** 2
+        f = (
+            (sig_c / self.Yc) ** 2
+            + (tau12 / self.S12) ** 2
+            + (tau13 / self.S13) ** 2
+            + (tau23 / self.S23) ** 2
+        )
 
         return f
 
@@ -2493,11 +2603,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         eps33_pos = torch.relu(eps33)
 
         eps_eq = torch.sqrt(
-            eps22_pos**2 +
-            eps33_pos**2 +
-            gam12**2 +
-            gam13**2 +
-            gam23**2
+            eps22_pos**2 + eps33_pos**2 + gam12**2 + gam13**2 + gam23**2
         )
         return cl * eps_eq
 
@@ -2512,11 +2618,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         eps33_neg = torch.relu(-eps33)
 
         eps_eq = torch.sqrt(
-            eps22_neg**2 +
-            eps33_neg**2 +
-            gam12**2 +
-            gam13**2 +
-            gam23**2
+            eps22_neg**2 + eps33_neg**2 + gam12**2 + gam13**2 + gam23**2
         )
         return cl * eps_eq
 
@@ -2536,8 +2638,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         eps = 1e-12 * (delta_0.abs() + 1.0)
         delta_f = 2.0 * G / (Xt + eps)
 
-        active = (delta_max >= delta_0) & (
-            f_ft >= 1.0) & (delta_f > delta_0 + eps)
+        active = (delta_max >= delta_0) & (f_ft >= 1.0) & (delta_f > delta_0 + eps)
 
         num = delta_f * (delta_max - delta_0)
         den = delta_max * (delta_f - delta_0 + eps)
@@ -2558,8 +2659,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         eps = 1e-12 * (delta_0.abs() + 1.0)
         delta_f = 2.0 * G / (Xc + eps)
 
-        active = (delta_max >= delta_0) & (
-            f_fc >= 1.0) & (delta_f > delta_0 + eps)
+        active = (delta_max >= delta_0) & (f_fc >= 1.0) & (delta_f > delta_0 + eps)
 
         num = delta_f * (delta_max - delta_0)
         den = delta_max * (delta_f - delta_0 + eps)
@@ -2580,8 +2680,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         eps = 1e-12 * (delta_0.abs() + 1.0)
         delta_f = 2.0 * G / (Yt + eps)
 
-        active = (delta_max >= delta_0) & (
-            f_mt >= 1.0) & (delta_f > delta_0 + eps)
+        active = (delta_max >= delta_0) & (f_mt >= 1.0) & (delta_f > delta_0 + eps)
 
         num = delta_f * (delta_max - delta_0)
         den = delta_max * (delta_f - delta_0 + eps)
@@ -2602,8 +2701,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         eps = 1e-12 * (delta_0.abs() + 1.0)
         delta_f = 2.0 * G / (Yc + eps)
 
-        active = (delta_max >= delta_0) & (
-            f_mc >= 1.0) & (delta_f > delta_0 + eps)
+        active = (delta_max >= delta_0) & (f_mc >= 1.0) & (delta_f > delta_0 + eps)
 
         num = delta_f * (delta_max - delta_0)
         den = delta_max * (delta_f - delta_0 + eps)
@@ -2674,9 +2772,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         G23_d = (1.0 - d_s23) * self.G_23
         G12_d, G13_d, G23_d = torch.broadcast_tensors(G12_d, G13_d, G23_d)
 
-        C_d = torch.zeros(
-            *batch_shape, 3, 3, 3, 3, dtype=S11.dtype, device=S11.device
-        )
+        C_d = torch.zeros(*batch_shape, 3, 3, 3, 3, dtype=S11.dtype, device=S11.device)
         for i in range(3):
             for j in range(3):
                 C_d[..., i, i, j, j] = C33[..., i, j]
