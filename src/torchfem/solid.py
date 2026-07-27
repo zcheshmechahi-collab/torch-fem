@@ -1,4 +1,5 @@
 import typing
+from functools import cached_property
 
 import pyvista
 import torch
@@ -11,6 +12,19 @@ from .materials import Material
 
 
 class Solid(Mechanics):
+    """Solid mechanics model for three-dimensional continua.
+
+    The element type (Tetra1, Tetra2, Hexa1, Hexa2) is inferred from the
+    number of nodes per element in the connectivity.
+
+    Attributes:
+        nodes: Nodal coordinates with shape [n_nod, 3].
+        elements: Element connectivity with shape [n_elem, nodes_per_element].
+        material: Vectorized material model.
+        forces: Applied nodal forces with shape [n_nod, 3].
+        displacements: Prescribed nodal displacements with shape [n_nod, 3].
+        constraints: Boolean mask of constrained DOFs with shape [n_nod, 3].
+    """
 
     def __repr__(self) -> str:
         etype = self.etype.__class__.__name__
@@ -35,19 +49,23 @@ class Solid(Mechanics):
         else:
             raise ValueError("Element type not supported.")
 
-    @property
+    @cached_property
     def char_lengths(self) -> Tensor:
         """Characteristic lengths of the elements."""
         vols = self.integrate_field()
         return vols ** (1 / 3)
 
     def compute_k(self, detJ: Tensor, BCB: Tensor) -> Tensor:
-        """Element stiffness matrix"""
+        """Element stiffness matrix contribution."""
         return torch.einsum("j,jkl->jkl", detJ, BCB)
 
     def compute_f(self, detJ: Tensor, B: Tensor, S: Tensor) -> Tensor:
         """Element internal force vector."""
         return torch.einsum("..., ...iI,...Ai->...IA", detJ, B, S)
+
+    def compute_m(self, detJ: Tensor, rho: Tensor) -> Tensor:
+        """Element mass matrix contribution."""
+        return rho * detJ
 
     @torch.no_grad()
     def plot(
@@ -178,19 +196,27 @@ class Solid(Mechanics):
 
 
 class SolidHeat(Heat, Solid):
+    """Solid heat conduction model.
+
+    Uses the same elements and plotting as `Solid`, but with a single
+    temperature degree of freedom per node.
+
+    Attributes:
+        nodes: Nodal coordinates with shape [n_nod, 3].
+        elements: Element connectivity with shape [n_elem, nodes_per_element].
+        material: Vectorized thermal material model.
+        heat_flux: Applied nodal heat sources with shape [n_nod, 1].
+        temperatures: Prescribed nodal temperatures with shape [n_nod, 1].
+        constraints: Boolean mask of constrained DOFs with shape [n_nod, 1].
+    """
 
     def __init__(self, nodes: Tensor, elements: Tensor, material: Material):
+        """Initialize the solid heat conduction problem.
+
+        Args:
+            nodes: Nodal coordinates with shape [n_nod, 3].
+            elements: Connectivity with shape [n_elem, nodes_per_element].
+            material: Thermal material model, e.g. `IsotropicConductivity3D`.
+        """
         super().__init__(nodes, elements, material)
         self._external_gradient = torch.zeros(self.n_elem, *self.n_flux)
-
-    def compute_m(self) -> Tensor:
-        ipoints = self.etype.ipoints
-        weights = self.etype.iweights
-
-        N, _, detJ = self.eval_shape_functions(ipoints)
-
-        # This is a thermal mass (rho * c), but we only have rho here.
-        rho = self.material.rho
-
-        m = torch.einsum("I, IN, IM, E, IE -> ENM", weights, N, N, rho, detJ)
-        return m

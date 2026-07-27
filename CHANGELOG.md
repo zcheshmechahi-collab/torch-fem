@@ -1,24 +1,213 @@
 # Changelog 
 
-## Unreleased
+## Version 0.7.4 - July 15 2026
+
+### Added
+- Regression tests for `time_integration(...)` in `tests/test_time_integration.py`.
+- Notebook tests for `basic/solid/thermal_transient.ipynb` and `optimization/planar/orientation_thermal_transient.ipynb`.
+
+### Changed
+- **Breaking:** `time_integration(...)` returns one result per requested `t_output` time. Previously `t_output` only set the end time and results came back per internal time step.
+- **Breaking:** Removed the `return_intermediate` argument of `time_integration(...)`. Results always carry a leading time axis of length `len(t_output)`; request the internal grid explicitly with `times = torch.arange(0.0, end_time + delta_t, delta_t)`, or index `[-1]` for the final state.
+- `time_integration(...)` subdivides each interval between output times into equal substeps of at most `delta_t`, replacing the `torch.arange(...)` and `unique()` merge. Output times are hit exactly, and a requested time close to an internal step no longer adds a spurious near-zero step.
+- `time_integration(...)` raises `ValueError` for empty, negative, or non-increasing `t_output`.
+
+### Fixed
+- `time_integration(...)` no longer drops the leading time axis of heat flux and temperature gradient when a single output time is requested.
+
+## Version 0.7.3 - July 14 2026
+
+### Added
+- Typed mesh import wrappers `import_shell(...)`, `import_planar(...)`, and `import_solid(...)` in `io.py` that return the requested model type and raise `TypeError` when the file's element type does not match.
+- New shell size-optimization example `optimization/shell/pressure_vessel.ipynb` (replacing the old `freesize.ipynb`), linked in the docs example gallery and covered by the notebook tests.
+- A minimal topology-optimization walkthrough in the getting-started docs, alongside a rewritten planar `topology.ipynb` example.
+- Python 3.14 added to the CI test matrix and the PyPI classifiers, plus additional package keywords in `pyproject.toml`.
+- Regression test guarding the `differentiable_parameters` trap: `solve()` outputs are fully detached when a grad-requiring design variable is not declared.
+
+### Changed
+- `torchfem.sdfs` no longer calls `torch.set_default_dtype(torch.float64)` at import time. SDF constructors now default their tensor arguments to `None` and build them internally, so importing the module no longer mutates the global default dtype.
+- `import_mesh(...)` converts mesh points to native-byte-order `float64` before building node tensors (previously cast to `float32`), correctly importing legacy big-endian `.vtk` files and preserving coordinate precision.
+- `Shell.plot(...)` forwards `**kwargs` to the underlying PyVista `add_mesh` calls (defaulting to `show_edges=True`), so surface appearance is customizable.
+
+### Fixed
+- Forgetting to declare a differentiable argument in a `solve(...)` call now fails loudly: when parameter gradients are not tracked, all outputs are detached instead of silently returning wrong gradients.
+- Corrected the performance docs, which still referenced the removed `cubes.ipynb`, and a stale version reference in the publications docs.
+
+## Version 0.7.2 - July 13 2026
+
+### Added
+- Two new benchmark problems next to the cube extension: a thermal SIMP slab (mirroring the *thermal-mesh* problem of the mosaic benchmark suite) and a Neo-Hookean large-stretch cube. Both are documented with CPU/GPU results and plots on the performance docs page.
+- New example `optimization/solid/source_recovery_thermal.ipynb` recovering a heat source distribution via adjoint optimization, linked in the docs example gallery.
+- New cube benchmark results for Apple M1 Pro and RTX 5090.
+- Gradient regression tests for multi-increment solves: load-side gradients against a single-step solve, and nonlinear Neo-Hookean material parameter gradients against the analytical uniaxial solution.
+
+### Changed
+- Refactored `benchmarks/` into per-problem modules (`cubes.py`, `thermal.py`, `hyperelasticity.py`) sharing a problem interface in `utils.py`. `run.py` runs one or all problems and writes `results/<problem>_<label>.json`. The outdated `cubes.ipynb` is removed.
+- `newton_solve(...)` and its `eval_residual` callback now receive the previous increment's state (`u_prev`, `grad_prev`, `flux_prev`, `state_prev`) explicitly.
+
+### Fixed
+- Adjoint gradients of multi-increment solves were truncated to the last increment, because the residual closure late-bound the loop variables and the previous state was detached. Gradients now chain across increments and match single-step and analytical references.
+- Adapted to CuPy's rename of the CG tolerance argument from `tol` to `rtol`.
+
+## Version 0.7.1 - July 8 2026
+
+### Added
+- New optional dependency group `notebook` for running the example notebooks.
+- New optional dependency group `dev` with the development tools.
+- Binder configuration (`.binder/requirements.txt`) so the Binder badge installs the package with the `notebook` extra.
+- CI now enforces linting (`flake8`), formatting (`black`, `isort`), and type checking (`basedpyright`) as dedicated jobs, and the tool configuration lives in `.flake8` and `pyproject.toml`.
+- A `notebook` pytest marker so the slow example-notebook tests can be split from the fast unit tests (`pytest -m "not notebook"`).
+- A "Models" section in the docs with API documentation for the core model classes (`Truss`, `Planar`, `Shell`, `Solid`, and heat variants) and new docstrings on these classes.
+- An examples gallery page in the docs linking all rendered example notebooks.
+
+### Changed
+- Split the monolithic `materials.py` into a `torchfem.materials` subpackage (`base`, `elasticity`, `hyperelasticity`, `plasticity`, `damage`, `conductivity`) mirroring the documentation structure. All material classes remain importable from `torchfem.materials`, so existing imports are unaffected.
+- Fixed VRAM tracking and updated GPU benchmarks.
+- Made torch to cupy handoff in `sparse.py` more memory friendly to reduce VRAM. 
+- Slimmed core dependencies: the packages above are only used by the example notebooks.
+- Relaxed the SciPy pin from `scipy~=1.15.0` to `scipy>=1.14` and added an explicit `torch>=2.0` lower bound.
+- Declared `numpy` as an explicit dependency.
+- CI runs the fast unit tests across Python 3.10–3.13 and the notebook tests once, instead of executing every notebook on all four versions.
+- Modernize PyPI publishing workflow.
+- Restructured the README.
+- Complete the theory page in the docs.
+
+### Fixed
+- Resolved all `basedpyright` type-checking errors.
+
+## Version 0.7.0 - July 1 2026 
+
+### Added
+- Composite laminates for shells via a new `Laminate` section: per-layer material, thickness, and angle, symmetric layups, reference-surface `offset`, per-layer Simpson integration, transverse shear and mass integrals, and nonlinear (state-bearing) plies integrated through the thickness. (Thanks to @yvanblanchard)
+- Examples `shell/cantilever_laminate.ipynb`, `shell/cantilever_fml.ipynb` (GLARE fiber-metal laminate), and `shell/copv.ipynb` (composite overwrapped pressure vessel).
+
+### Changed
+- `torchfem.data.get_data()` now returns a `pathlib.Path` instead of `str`.
+
+### Fixed
+- Plane-stress plasticity: the algorithmic tangent now broadcasts a per-point hardening slope `sigma_f_prime(q)` correctly across a batch.
+- Global material `orientation` for `Shell`, projected onto each element to define the ply-angle reference axis (independent of element node ordering).
+
+### Removed
+- Unused failure-criteria module.
+
+## Version 0.6.3 - May 18 2026 
+
+### Added
+- Alternative text for images in README.md
+- Test for example files.
+- Test for utils.
+- Markdown files to declare contribution, governance, code of conduct, and support.
+- Documentation of elements with shape function plots.
+- Publications page in docs.
+- Theory chapter in docs.
+- New publication on C/C-SiC plates added to docs.
+
+### Changed 
+- Refactored benchmarks with plots and added them to documentation.
+- Improved documentation in truss shape optimization example.
+- Integrate shell forces and moments from integration points to enable non-linear materials
+- Add basic `shell/plasticity.ipynb` example.
+- Significantly enhanced material testing coverage.
+- Renamed data helper API from `torchfem.examples.get_example_file(...)` to `torchfem.data.get_data(...)` and moved the module from `examples.py` to `data.py`.
+- Skip unnecessary stiffness matrix construction during the backward pass to reduce memory and compute overhead.
+- Reduce initial GPU memory peaks with chunked index mapping in `__init__`.
+
+### Removed 
+- The utility functions `voigt_strain_rotation` and `voigt_stress_rotation` are not used anywhere. They are removed.
+- Dependency on unused `memory_profiler`. This was replaced by a custom profiling function for benchmarking earlier.
+
+### Fixed 
+- The FPP example was not working correctly after removing `retain_graph=True` from the sparse solver. Also, detaching `f` in base was introducing an error here. This is now fixed.
+- Fixed bug where external strains were validated against `n_nodes` instead of `n_elem` (Thanks to @JulGre).
+- Fixed `compute_stiffness` argument not being properly propagated in `integrate_material`.
+
+## Version 0.6.2 - March 25 2026 
+
+### Fixed
+- Critical fix for trusses. 
+
+## Version 0.6.1 - March 24 2026 
+
+### Fixed
+- Silence warning on sparse invariant checks.
+- Fix initial gradient shape in k0 for topology optimization.
+
+## Version 0.6.0 - March 18 2026 
+
+### Added
+- Added an adjoint Newton-Raphson autograd operator for nonlinear solves via `newton_solve(...)`.
+- Added gradient regression tests in `tests/test_gradients.py` for:
+	- consistency between single-step and incremental gradients in mechanics,
+	- finite and stable gradients for planar heat topology-style parameters.
+
+### Changed
+- Refactored mechanics and heat integration interfaces in `base.py` to use explicit previous-step inputs and return updated integration-point fields instead of mutating global history tensors in-place.
+- Renamed the autograd-enabled sparse linear solve entry point from `sparse_solve(...)` to `differentiable_sparse_solve(...)`, while `sparse_solve(...)` now denotes the backend sparse solve routine used by both forward and adjoint paths.
+- Updated `solve(...)` and `time_integration(...)` to accept `differentiable_parameters` as either a single tensor or an iterable of tensors.
+- Updated nonlinear and transient solve paths to use implicit adjoint logic with cleaner graph handling and optional cached sparse warm starts.
+- Improved API and type annotations in solver internals (`sparse.py`, `base.py`) and expanded solver docstrings.
+- Expanded differentiability documentation (`docs/differentiability.md`) with explicit sections on:
+	- adjoint sparse linear solve,
+	- adjoint Newton-Raphson for nonlinear FEM.
+- Updated usage examples in `README.md` and `docs/getting_started.md` to pass `differentiable_parameters=...` in differentiable solve calls.
+- Updated many notebooks and benchmark scripts/examples to match the current differentiable solve API (single tensor for single-parameter cases, tuple only for multi-parameter cases).
+- Accelerated assembly by precomputing sparsity patterns (notably helping iterative optimization examples).
+- Added meshio compression toggle support.
+
+### Fixed
+- Ensured plotting utilities move tensors to CPU before plotting to avoid backend/device issues.
+
+## Version 0.5.1 - January 14 2026 
 
 ### Added 
+- Added a new example "property_fields.ipynb" for neural fields in the planar optimization examples.
+
+### Changes 
+- In the backward sparse solve, we solve the adjoint problem with A_T. Since A is symmetric, we can use the exact same preconditioner M from the forward pass again in iterative methods. This saves us the overhead of creating the preconditioner again and accelerates backward passes massively. 
+- Improve construction of sparse gradient in adjoint backward path of the sparse solver knowing that it is coalesced. 
+- Vectorize material parameters in hyperelastic materials
+- Vectorize evaluation of shape function. This accelerates in particular frequent small solves in inverse problems.
+- Make characteristic length cached properties to prevent frequent recomputation in inverse problems.
+
+
+## Version 0.5.0 - December 19 2025 
+
+### Added 
+- Added `PlanarHeat` and `SolidHeat` for heat transfer problems (Thanks to @kraussco).
+- Added new planar examples "thermal_static.ipynb", "thermal_transient.ipynb", "orientation_thermal_static.ipynb", "topology_thermal_static.ipynb" for heat transfer and thermal optimization (Thanks to @kraussco).
+- Added new solid examples "thermal_static.ipynb", "thermal_transient.ipynb", "topology_thermal.ipynb" for heat transfer and thermal optimization (Thanks to @kraussco).
+- Added export of animated results.
+- Better meshing capabilities in the `mesh` module (structured tet meshes, structured tri meshes) to remove dependency on meshzoo. 
 - Warning message for single precision solves.
 - Added new example geometry (*.vtu) of a quarter symmetric plate.
 - Added two new solid examples "isotropic_damage.ipynb" and "plate_damage.ipynb"
 - Add simple damage model 'IsotropicDamage3D'.
 - \_\_repr\_\_ functions to print torch-fem objects.
 
+
 ### Changed 
+- Split the base FEM class into a `Mechanics` and a `Heat` class with generic fluxes.
+- Shells are now properly integrated in the parent classes by inheriting from `Mechanics`.
+- Simplified thickness assignments for planar and shell meshes.
+- Planar plots show vectors, if the provided property is multi-dimensional.
 - Material 'step' functions get an additional input 'cl' for the characteristic length of each element. This can be used for regularization in damage models.
+- Accelerate element potting for planar models.
 - Accelerate 'linear_to_quadratic()' function for elements.
 - Accelerate filter matrix H in 'bracket.ipynb' topology optimization example with KD Tree.
 - Planar plot uses explicit triangulation objects.
 - Truss plot accepts u as positional argument to match base class.
 
 ### Fixed
+- Fixed some typing issues.
+- In some cases the planar contour plot did not show the highest contour level correctly. This is fixed now.
+- The hyperelasticity was somewhat working, but not strictly correct and failed to converge at very large strains. Now, we use a Total Lagrangian Formulation, which is robustly and (hopefully) correctly implemented.
 - Corrected type hints in `export_mesh` for elem_data.
 - The size of the stiffness tensor for `OrthotropicElasticityPlaneStrain` was incorrect. It is corrected from (3,3,3,3) to (2,2,2,2).
+
+### Removed 
+- The material classes `IsotropicHencky3D`, `IsotropicHenckyPlanarStrain` and `IsotropicHenckyPlanarStress` are removed. Use the more general hyperelastic models instead.
+- Dependency on meshzoo. This was limited to a few nodes with a license - use the internal functions in the `mesh` module instead.
 
 ## Version 0.4.5 - June 05 2025 
 

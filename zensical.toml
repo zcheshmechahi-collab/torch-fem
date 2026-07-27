@@ -1,0 +1,156 @@
+[project]
+site_name = "torch-fem"
+site_description = "The documentation for the torch-fem Python package."
+site_author = "Nils Meyer"
+site_url = "https://meyer-nils.github.io/torch-fem"
+
+repo_url = "https://github.com/meyer-nils/torch-fem"
+repo_name = "GitHub"
+edit_uri = "edit/main/docs"
+
+nav = [
+  { "About" = "index.md" },
+  { "Installation" = "installation.md" },
+  { "Getting Started" = "getting_started.md" },
+  { "Differentiability" = "differentiability.md" },
+  { "Examples" = "examples.md" },
+  { "Theory" = "theory.md" },
+  { "Performance" = "performance.md" },
+  { "Publications" = "publications.md" },
+  { "Models" = [
+    { "Base" = "models/index.md" },
+    { "Truss" = "models/truss.md" },
+    { "Planar" = "models/planar.md" },
+    { "Shell" = "models/shell.md" },
+    { "Solid" = "models/solid.md" },
+  ] },
+  { "Materials" = [
+    { "Base" = "materials/index.md" },
+    { "Elasticity" = [
+      { "Isotropic 3D" = "materials/elasticity/isotropic_elasticity_3D.md" },
+      { "Isotropic Plane Stress" = "materials/elasticity/isotropic_elasticity_plane_stress.md" },
+      { "Isotropic Plane Strain" = "materials/elasticity/isotropic_elasticity_plane_strain.md" },
+      { "Isotropic 1D" = "materials/elasticity/isotropic_elasticity_1D.md" },
+      { "Orthotropic 3D" = "materials/elasticity/orthotropic_elasticity_3D.md" },
+      { "Transverse 3D" = "materials/elasticity/transverse_isotropic_elasticity_3D.md" },
+      { "Orthotropic Plane Stress" = "materials/elasticity/orthotropic_elasticity_plane_stress.md" },
+      { "Orthotropic Plane Strain" = "materials/elasticity/orthotropic_elasticity_plane_strain.md" },
+    ] },
+    { "Hyperelasticity" = [
+      { "3D" = "materials/hyperelasticity/hyperelastic_3D.md" },
+      { "Plane Stress" = "materials/hyperelasticity/hyperelastic_plane_stress.md" },
+      { "Plane Strain" = "materials/hyperelasticity/hyperelastic_plane_strain.md" },
+    ] },
+    { "Plasticity" = [
+      { "Isotropic 3D" = "materials/plasticity/isotropic_plasticity_3D.md" },
+      { "Isotropic Plane Stress" = "materials/plasticity/isotropic_plasticity_plane_stress.md" },
+      { "Isotropic Plane Strain" = "materials/plasticity/isotropic_plasticity_plane_strain.md" },
+      { "Isotropic 1D" = "materials/plasticity/isotropic_plasticity_1D.md" },
+    ] },
+    { "Damage" = [
+      { "Isotropic 3D" = "materials/damage/isotropic_damage_3D.md" },
+    ] },
+  ] },
+    { "Elements" = [
+    { "Base" = "elements/index.md" },
+    { "1D" = [
+      { "Bar1" = "elements/1d/bar1.md" },
+      { "Bar2" = "elements/1d/bar2.md" },
+    ] },
+    { "2D" = [
+      { "Tria1" = "elements/2d/tria1.md" },
+      { "Tria2" = "elements/2d/tria2.md" },
+      { "Quad1" = "elements/2d/quad1.md" },
+      { "Quad2" = "elements/2d/quad2.md" },
+    ] },
+    { "3D" = [
+      { "Tetra1" = "elements/3d/tetra1.md" },
+      { "Tetra2" = "elements/3d/tetra2.md" },
+      { "Hexa1" = "elements/3d/hexa1.md" },
+      { "Hexa2" = "elements/3d/hexa2.md" },
+    ] },
+  ] },
+]
+
+extra_javascript = [
+    "javascripts/mathjax.js",
+    "https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"
+]
+
+[project.theme]
+language = "en"
+logo = "images/logo.png"
+
+
+features = [
+    "announce.dismiss",
+    #"content.action.edit",
+    #"content.action.view",
+    "content.code.annotate",
+    "content.code.copy",
+    "content.code.select",
+    "content.footnote.tooltips",
+    "content.tabs.link",
+    "content.tooltips",
+    "navigation.footer",
+    "navigation.indexes",
+    #"navigation.instant",
+    #"navigation.instant.prefetch",
+    "navigation.path",
+    "navigation.top",
+    "navigation.tracking",
+    "search.highlight",
+]
+
+[[project.theme.palette]]
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[project.plugins.mkdocstrings.handlers.python]
+inventories = ["https://docs.python.org/3/objects.inv"]
+paths = ["src"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+docstring_style = "google"
+inherited_members = true
+show_source = false
+
+[project.plugins.jupyter]
+src = "examples"
+dest = "examples"
+execute = true
+
+[project.markdown_extensions.abbr]
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.def_list]
+[project.markdown_extensions.footnotes]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.toc]
+permalink = true
+[project.markdown_extensions.pymdownx.arithmatex]
+generic = true
+[project.markdown_extensions.pymdownx.betterem]
+smart_enable = "all"
+[project.markdown_extensions.pymdownx.caret]
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.emoji]
+emoji_generator = "zensical.extensions.emoji.to_svg"
+emoji_index = "zensical.extensions.emoji.twemoji"
+[project.markdown_extensions.pymdownx.highlight]
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.keys]
+[project.markdown_extensions.pymdownx.mark]
+[project.markdown_extensions.pymdownx.smartsymbols]
+[project.markdown_extensions.pymdownx.superfences]
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true
+[project.markdown_extensions.pymdownx.tilde]

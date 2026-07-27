@@ -1,33 +1,19 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/torch-fem)
 [![PyPI - Version](https://img.shields.io/pypi/v/torch-fem)](https://pypi.org/project/torch-fem/)
-[![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Tests](https://github.com/meyer-nils/torch-fem/actions/workflows/python-package.yml/badge.svg)](https://github.com/meyer-nils/torch-fem/actions/workflows/python-package.yml)
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/meyer-nils/torch-fem/HEAD)
+[![DOI](https://zenodo.org/badge/651011204.svg)](https://doi.org/10.5281/zenodo.20306384)
 
+<p align="center">
+  <a href="https://meyer-nils.github.io/torch-fem"><b>Documentation</b></a> ·
+  <a href="https://meyer-nils.github.io/torch-fem/examples/"><b>Examples</b></a> ·
+  <a href="https://github.com/meyer-nils/torch-fem/blob/main/CHANGELOG.md"><b>Changelog</b></a>
+</p>
 
 # torch-fem
-Simple GPU accelerated differentiable finite elements for solid mechanics with PyTorch. 
-PyTorch enables efficient computation of sensitivities via automatic differentiation and using them in optimization tasks.
 
-## Installation
-Your may install torch-fem via pip with
-```
-pip install torch-fem
-```
-
-*Optional*: For GPU support, install CUDA, PyTorch for CUDA, and the corresponding CuPy version.
-
-For CUDA 11.8: 
-```
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-pip install cupy-cuda11x # v11.2 - 11.8
-```
-
-For CUDA 12.6:
-```
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
-pip install cupy-cuda12x # v12.x
-```
+*torch-fem* is a simple GPU-accelerated differentiable finite element solver for solid mechanics built on PyTorch. Automatic differentiation provides exact sensitivities of simulation results with respect to material parameters, geometry, loads, etc. without hand-derived adjoint formulations. It is aimed at researchers in computational mechanics who need gradients through FEM solvers for tasks such as optimization, inverse problems, and machine-learning-augmented simulation.
 
 ## Features
 - Elements
@@ -40,79 +26,28 @@ pip install cupy-cuda12x # v12.x
   - Orthotropic linear elasticity
   - Isotropic small strain plasticity
   - Isotropic small strain damage
-  - Logarithmic finite strain elasticity
   - Hyperelasticity (via automatic differentiation of their energy function)
+  - Isotropic thermal conductivity
+  - Orthotropic thermal conductivity
   - Custom user material interface
+
 - Utilities
   - Homogenization of orthotropic elasticity for composites
+  - Composite laminates for shells
+  - Simple structured meshing
   - I/O to and from other mesh formats via meshio
 
-## Basic examples
-The subdirectory `examples->basic` contains a couple of Jupyter Notebooks demonstrating the use of torch-fem for trusses, planar problems, shells and solids. You may click on the examples to check out the notebooks online.
+## Installation
+You may install *torch-fem* via pip with
 
-<table>
-    <tbody>
-        <tr>
-            <td style="width: 30%;"><a href="https://meyer-nils.github.io/torch-fem/examples/basic/solid/gyroid.html"><img src="https://meyer-nils.github.io/torch-fem/gyroid.png"></a></td>
-            <td style="width: 30%;"><a href="https://meyer-nils.github.io/torch-fem/examples/basic/solid/cubes.html"><img src="https://meyer-nils.github.io/torch-fem/cubes.png"></a></td>
-            <td style="width: 30%;"><a href="https://meyer-nils.github.io/torch-fem/examples/basic/planar/cantilever.html"><img src="https://meyer-nils.github.io/torch-fem/cantilever_tria2.png"></a></td>
-        </tr>
-        <tr>
-            <td align="center"><b>Gyroid:</b> Support for voxel meshes and implicit surfaces.</td>
-            <td align="center"><b>Solid cubes:</b> There are several examples with different element types rendered in PyVista.</td>
-            <td align="center"><b>Planar cantilever beams:</b> There are several examples with different element types rendered in matplotlib.</td>
-        </tr>
-        <tr>
-            <td colspan="3"><a href="https://meyer-nils.github.io/torch-fem/examples/basic/planar/plasticity.html"><img src="https://meyer-nils.github.io/torch-fem/plate_hole_plasticity.png"></a></td>
-        </tr>
-        <tr>
-            <td colspan="3" align="center"><b>Plasticity in a plate with hole:</b> Isotropic linear hardening model for plane-stress or plane-strain.</td>
-        </tr>
-        <tr>
-            <td colspan="3"><a href="https://meyer-nils.github.io/torch-fem/examples/basic/solid/finite_strain.html"><img src="https://meyer-nils.github.io/torch-fem/cantilever_finite_strain.png"></a></td>
-        </tr>
-        <tr>
-            <td colspan="3" align="center"><b>Cantilever:</b> Logarithmic strains and geometric stiffness.</td>
-        </tr>
-    </tbody>
-</table>
+```
+pip install torch-fem
+```
 
-## Optimization examples
-The subdirectory `examples->optimization` demonstrates the use of torch-fem for optimization of structures (e.g. topology optimization, composite orientation optimization). You may click on the examples to check out the notebooks online.
-
-<table>
-    <tbody>
-        <tr>
-            <td style="width: 50%;"><a href="https://meyer-nils.github.io/torch-fem/examples/optimization/truss/shape.html"><img src="https://meyer-nils.github.io/torch-fem/bridge.png"></a></td>
-            <td style="width: 50%;"><a href="https://meyer-nils.github.io/torch-fem/examples/optimization/planar/shape.html"><img src="https://meyer-nils.github.io/torch-fem/fillet_shape_optimization.png"></a></td>
-        </tr>
-        <tr>
-            <td align="center"><b>Shape optimization of a truss:</b> The top nodes are moved and MMA + autograd is used to minimize the compliance.</td>
-            <td align="center"><b>Shape optimization of a fillet:</b> The shape is morphed with shape basis vectors and MMA + autograd is used to minimize the maximum stress.</td>
-        </tr>
-        <tr>
-            <td style="width: 50%;"><a href="https://meyer-nils.github.io/torch-fem/examples/optimization/planar/topology.html"><img src="https://meyer-nils.github.io/torch-fem/topopt_mbb.png"></a></td>
-            <td style="width: 50%;"><img src="https://meyer-nils.github.io/torch-fem/topopt_3d.png"></td>
-        </tr>
-        <tr>
-            <td align="center"><b>Topology optimization of a MBB beam:</b> You can switch between analytical and autograd sensitivities.</td>
-            <td align="center"><b>Topology optimization of a jet engine bracket:</b> The 3D model is exported to Paraview for visualization.</td>
-        </tr>
-        <tr>
-            <td style="width: 50%;"><a href="https://meyer-nils.github.io/torch-fem/examples/optimization/planar/topology+orientation.html"><img src="https://meyer-nils.github.io/torch-fem/topo+ori.png"></a></td>
-            <td style="width: 50%;"><a href="https://meyer-nils.github.io/torch-fem/examples/optimization/planar/orientation.html"><img src="https://meyer-nils.github.io/torch-fem/plate_hole_shape_optimization.png"></a>
-            </td>
-        </tr>
-        <tr>
-            <td align="center"><b>Combined topology and orientation optimization:</b> Compliance is minimized by optimizing fiber orientation and density of an anisotropic material using automatic differentiation.</td>
-            <td align="center"><b>Fiber orientation optimization of a plate with a hole</b> Compliance is minimized by optimizing the fiber orientation of an anisotropic material using automatic differentiation w.r.t. element-wise fiber angles.</td>
-        </tr>
-    </tbody>
-</table>
-
+To run the example notebooks, install with the `notebook` extra (`pip install torch-fem[notebook]`). For GPU acceleration, install PyTorch with CUDA support and the matching CuPy version - see the [installation guide](https://meyer-nils.github.io/torch-fem/installation/) for details.
 
 ## Minimal example
-This is a minimal example of how to use torch-fem to solve a very simple planar cantilever problem. 
+This is a minimal example of how to use *torch-fem* to solve a very simple planar cantilever problem. 
 
 ```python
 import torch
@@ -142,7 +77,7 @@ cantilever.plot(node_markers="o", node_labels=True)
 ```
 This creates a minimal planar FEM model:
 
-![minimal](https://meyer-nils.github.io/torch-fem/minimal_example.png)
+![minimal](https://meyer-nils.github.io/torch-fem/images/minimal_example.png)
 
 ```python
 # Solve
@@ -153,61 +88,102 @@ cantilever.plot(u, node_property=torch.norm(u, dim=1))
 ```
 This solves the model and plots the result:
 
-![minimal](https://meyer-nils.github.io/torch-fem/minimal_example_solved.png)
+![minimal](https://meyer-nils.github.io/torch-fem/images/minimal_example_solved.png)
 
-If we want to compute gradients through the FEM model, we simply need to define the variables that require gradients. Automatic differentiation is performed through the entire FE solver.
+If we want to compute gradients through the FEM model, we simply need to define the variables that require gradients. Automatic differentiation is performed through the entire FE solver. Rather than differentiating through individual solver iterations or Newton iterations (this would explode in memory and autograd graph size) though, the *implicit function theorem* is used to formulate an adjoint backward for `solve()`.
 ```python 
 # Enable automatic differentiation
 cantilever.thickness.requires_grad = True
-u, f, _, _, _ = cantilever.solve()
+u, f, _, _, _ = cantilever.solve(differentiable_parameters=cantilever.thickness)
 
 # Compute sensitivity of compliance w.r.t. element thicknesses
 compliance = torch.inner(f.ravel(), u.ravel())
 torch.autograd.grad(compliance, cantilever.thickness)[0]
 ```
 
-## Benchmarks 
-The following benchmarks were performed on a cube subjected to a one-dimensional extension. The cube is discretized with N x N x N linear hexahedral elements, has a side length of 1.0 and is made of a material with Young's modulus of 1000.0 and Poisson's ratio of 0.3. The cube is fixed at one end and a displacement of 0.1 is applied at the other end. The benchmark measures the forward time to assemble the stiffness matrix and the time to solve the linear system. In addition, it measures the backward time to compute the sensitivities of the sum of displacements with respect to forces.
+## Basic examples
+The subdirectory `examples/basic` contains a couple of Jupyter notebooks demonstrating the use of *torch-fem* for trusses, planar problems, shells, and solids. You may click on the examples to check out the notebooks online.
 
-#### Apple M1 Pro (10 cores, 16 GB RAM)
-Python 3.10, SciPy 1.14.1, Apple Accelerate
+<table>
+    <tbody>
+        <tr>
+            <td><a href="https://meyer-nils.github.io/torch-fem/examples/basic/planar/plasticity.html"><img src="https://meyer-nils.github.io/torch-fem/images/plate_hole_plasticity.png" alt="Planar plate with a hole plasticity example"></a></td>
+        </tr>
+        <tr>
+            <td align="center"><b>Plasticity in a plate with hole:</b> Isotropic linear hardening model for plane-stress or plane-strain.</td>
+        </tr>
+        <tr>
+            <td><a href="https://meyer-nils.github.io/torch-fem/examples/basic/solid/finite_strain.html"><img src="https://meyer-nils.github.io/torch-fem/images/cantilever_finite_strain.png" alt="Finite-strain cantilever example"></a></td>
+        </tr>
+        <tr>
+            <td align="center"><b>Finite strain cantilever:</b> Hyperelastic model in Total Lagrangian Formulation.</td>
+        </tr>
+    </tbody>
+</table>
 
-|  N  |     DOFs |  FWD Time |  BWD Time |   Peak RAM |
-| --- | -------- | --------- | --------- | ---------- |
-|  10 |     3000 |     0.14s |     0.03s |    592.2MB |
-|  20 |    24000 |     0.99s |     0.15s |    968.3MB |
-|  30 |    81000 |     3.42s |     0.57s |   1562.8MB |
-|  40 |   192000 |     8.48s |     1.14s |   2497.1MB |
-|  50 |   375000 |    16.46s |     2.23s |   3963.7MB |
-|  60 |   648000 |    28.63s |     3.56s |   5503.3MB |
-|  70 |  1029000 |    46.86s |     5.91s |   6309.5MB |
-|  80 |  1536000 |    74.12s |    10.69s |   6933.7MB |
-|  90 |  2187000 |   121.11s |    16.63s |   7663.5MB |
-| 100 |  3000000 |   179.44s |    38.35s |   9662.4MB |
+## Optimization examples
+The subdirectory `examples/optimization` demonstrates the use of *torch-fem* for optimization of structures (e.g. topology optimization, composite orientation optimization). You may click on the examples to check out the notebooks online.
 
+<table>
+    <tbody>
+        <tr>
+            <td style="width: 50%;"><a href="https://meyer-nils.github.io/torch-fem/examples/optimization/truss/shape.html"><img src="https://meyer-nils.github.io/torch-fem/images/bridge.png" alt="Truss shape optimization example"></a></td>
+            <td style="width: 50%;"><a href="https://meyer-nils.github.io/torch-fem/examples/optimization/planar/shape.html"><img src="https://meyer-nils.github.io/torch-fem/images/fillet_shape_optimization.png" alt="Planar fillet shape optimization example"></a></td>
+        </tr>
+        <tr>
+            <td align="center"><b>Shape optimization of a truss:</b> The top nodes are moved and MMA + autograd is used to minimize the compliance.</td>
+            <td align="center"><b>Shape optimization of a fillet:</b> The shape is morphed with shape basis vectors and MMA + autograd is used to minimize the maximum stress.</td>
+        </tr>
+        <tr>
+            <td style="width: 50%;"><a href="https://meyer-nils.github.io/torch-fem/examples/optimization/planar/topology.html"><img src="https://meyer-nils.github.io/torch-fem/images/topopt_mbb.png" alt="MBB beam topology optimization example"></a></td>
+            <td style="width: 50%;"><img src="https://meyer-nils.github.io/torch-fem/images/topopt_3d.png" alt="3D jet engine bracket topology optimization result"></td>
+        </tr>
+        <tr>
+            <td align="center"><b>Topology optimization of a MBB beam:</b> You can switch between analytical and autograd sensitivities.</td>
+            <td align="center"><b>Topology optimization of a jet engine bracket:</b> The 3D model is exported to Paraview for visualization.</td>
+        </tr>
+        <tr>
+            <td style="width: 50%;"><a href="https://meyer-nils.github.io/torch-fem/examples/optimization/planar/topology+orientation.html"><img src="https://meyer-nils.github.io/torch-fem/images/topo+ori.png" alt="Combined topology and orientation optimization example"></a></td>
+            <td style="width: 50%;"><a href="https://meyer-nils.github.io/torch-fem/examples/optimization/planar/orientation.html"><img src="https://meyer-nils.github.io/torch-fem/images/plate_hole_shape_optimization.png" alt="Fiber orientation optimization example"></a>
+            </td>
+        </tr>
+        <tr>
+            <td align="center"><b>Combined topology and orientation optimization:</b> Compliance is minimized by optimizing fiber orientation and density of an anisotropic material using automatic differentiation.</td>
+            <td align="center"><b>Fiber orientation optimization of a plate with a hole</b> Compliance is minimized by optimizing the fiber orientation of an anisotropic material using automatic differentiation w.r.t. element-wise fiber angles.</td>
+        </tr>
+    </tbody>
+</table>
 
-#### AMD Ryzen Threadripper PRO 5995WX (64 Cores, 512 GB RAM) and NVIDIA GeForce RTX 4090
-Python 3.12, CuPy 13.3.0, CUDA 11.8
+## Performance 
+*torch-fem* solves problems with millions of degrees of freedom: a linear elastic hexahedral cube model with 1.5 million DOFs assembles and solves in about four seconds on a consumer GPU (RTX 4090, float64). Detailed CPU and GPU benchmarks for timing and memory are reported in the [performance documentation](https://meyer-nils.github.io/torch-fem/performance/) and can be reproduced with the scripts in `benchmarks/`.
 
-|  N  |     DOFs |  FWD Time |  BWD Time |   Peak RAM |
-| --- | -------- | --------- | --------- | ---------- |
-|  10 |     3000 |     0.66s |     0.15s |   1371.7MB |
-|  20 |    24000 |     1.00s |     0.43s |   1358.9MB |
-|  30 |    81000 |     1.14s |     0.65s |   1371.1MB |
-|  40 |   192000 |     1.37s |     0.83s |   1367.3MB |
-|  50 |   375000 |     1.51s |     1.04s |   1356.4MB |
-|  60 |   648000 |     1.94s |     1.43s |   1342.1MB |
-|  70 |  1029000 |     5.19s |     4.31s |   1366.8MB |
-|  80 |  1536000 |     7.48s |    18.88s |   5105.6MB |
+## Citing torch-fem
+If you use torch-fem in your research, please cite it as follows:
 
+```bibtex
+@software{torchfem,
+    author = {Meyer, Nils},
+    title  = {torch-fem: GPU accelerated differentiable finite elements for solid mechanics with PyTorch},
+    doi    = {10.5281/zenodo.20306384},
+    url    = {https://github.com/meyer-nils/torch-fem},
+}
+```
+
+## Contributing
+Contributions are welcome! Please check out the [contributing guide](https://github.com/meyer-nils/torch-fem/blob/main/CONTRIBUTING.md) for the development workflow. Bug reports, feature requests, and usage questions are all welcome in the [issue tracker](https://github.com/meyer-nils/torch-fem/issues) - see the [support guide](https://github.com/meyer-nils/torch-fem/blob/main/SUPPORT.md) for what to include.
 
 ## Alternatives
-There are many alternative FEM solvers in Python that you may also consider: 
+*torch-fem* focuses on solid mechanics and thermal problems. It provides sensitivities through PyTorch autograd, which makes it easy to drop into optimization loops and ML pipelines. It is the natural choice if you are working in the PyTorch ecosystem. Depending on your needs, one of these Python FEM tools may serve you better:
 
-- Non-differentiable 
-  - [scikit-fem](https://github.com/kinnala/scikit-fem)
-  - [nutils](https://github.com/evalf/nutils) 
-  - [felupe](https://github.com/adtzlr/felupe)
-- Differentiable 
-  - [jaxfem](https://github.com/deepmodeling/jax-fem)
-  - [PyTorch FEA](https://github.com/liangbright/pytorch_fea)
+| Library | Focus | Differentiable | Consider it over torch-fem when… |
+|---|---|:---:|---|
+| [FEniCSx (DOLFINx)](https://github.com/FEniCS/dolfinx) ![stars](https://img.shields.io/github/stars/FEniCS/dolfinx?style=flat-square) | General PDEs, UFL weak forms, MPI | via [dolfin-adjoint](https://github.com/dolfin-adjoint/pyadjoint) | you need arbitrary weak forms or massively parallel distributed runs |
+| [SfePy](https://github.com/sfepy/sfepy) ![stars](https://img.shields.io/github/stars/sfepy/sfepy?style=flat-square) | General multiphysics, pure Python | — | you need a broad range of PDE applications on CPU |
+| [JAX-FEM](https://github.com/deepmodeling/jax-fem) ![stars](https://img.shields.io/github/stars/deepmodeling/jax-fem?style=flat-square) | Differentiable FEM, JAX / GPU | ✅ | your stack is built on JAX rather than PyTorch |
+| [Firedrake](https://github.com/firedrakeproject/firedrake) ![stars](https://img.shields.io/github/stars/firedrakeproject/firedrake?style=flat-square) | General PDEs, UFL weak forms | via [pyadjoint](https://github.com/dolfin-adjoint/pyadjoint) | you want a UFL form language with automated adjoints for multiphysics |
+| [scikit-fem](https://github.com/kinnala/scikit-fem) ![stars](https://img.shields.io/github/stars/kinnala/scikit-fem?style=flat-square) | Lightweight assembly, NumPy/SciPy | — | you want minimal dependencies and full control over custom forms |
+| [FElupe](https://github.com/adtzlr/felupe) ![stars](https://img.shields.io/github/stars/adtzlr/felupe?style=flat-square) | Finite-strain solid mechanics | partially via [tensortrax](https://github.com/adtzlr/tensortrax) | you work with hyperelastic / finite-strain solids |
+| [Nutils](https://github.com/evalf/nutils) ![stars](https://img.shields.io/github/stars/evalf/nutils?style=flat-square) | High-order / immersed methods | — | you research advanced or immersed discretizations including IGA |
+| [PyTorch-FEA](https://github.com/liangbright/pytorch_fea) ![stars](https://img.shields.io/github/stars/liangbright/pytorch_fea?style=flat-square) | Biomechanics, PyTorch | ✅ | you work on soft-tissue / inverse biomechanics |
+
+Not sure which to pick? The [mosaic](https://github.com/pasteurlabs/mosaic) differentiable-physics benchmark suite compares several of these solvers on gradient accuracy and forward/adjoint performance under a common interface.

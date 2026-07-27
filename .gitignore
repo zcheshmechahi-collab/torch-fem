@@ -24,3 +24,10 @@ dist
 !src/torchfem/data/*.vtu
 *.inp
 !src/torchfem/data/*.inp
+
+# Documentation
+site
+
+# Jupyter / editor artifacts
+.ipynb_checkpoints/
+anaconda_projects/

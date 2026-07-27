@@ -1,5 +1,6 @@
 from os import PathLike
-from typing import Dict, List
+from pathlib import Path
+from typing import Any, Dict, List
 
 import numpy as np
 import torch
@@ -19,6 +20,7 @@ def export_mesh(
     filename: str | PathLike,
     nodal_data: Dict[str, Tensor] = {},
     elem_data: Dict[str, List[Tensor]] = {},
+    compress: bool = True,
 ):
     etype = mesh.etype.meshio_type
 
@@ -31,7 +33,15 @@ def export_mesh(
             for key, tensor_list in elem_data.items()
         },
     )
-    msh.write(filename)
+    suffix = Path(str(filename)).suffix.lower()
+    write_kwargs: Dict[str, Any] = {}
+    if suffix in {".vtu"}:
+        write_kwargs["compression"] = "zlib" if compress else None
+    elif suffix in {".xdmf", ".xmf"}:
+        write_kwargs["compression"] = "gzip" if compress else None
+        if compress:
+            write_kwargs["compression_opts"] = 4
+    msh.write(filename, **write_kwargs)
 
 
 def import_mesh(
@@ -52,10 +62,14 @@ def import_mesh(
     etype = etypes[0]
 
     elements = torch.tensor(elems)
+
+    device = torch.get_default_device()
     dtype = torch.get_default_dtype()
 
-    if not np.allclose(mesh.points[:, 2], np.zeros_like(mesh.points[:, 2])):
-        nodes = torch.from_numpy(mesh.points.astype(np.float32)).type(dtype)
+    points = mesh.points.astype(np.float64)
+
+    if not np.allclose(points[:, 2], np.zeros_like(points[:, 2])):
+        nodes = torch.tensor(points, dtype=dtype, device=device)
         if etype in ["triangle"]:
             return Shell(nodes, elements, material, thickness=thickness)
         elif etype in ["tetra", "tetra10", "hexahedron", "hexahedron20"]:
@@ -63,5 +77,33 @@ def import_mesh(
         else:
             raise Exception(f"Cannot interpret element type {etype}.")
     else:
-        nodes = torch.from_numpy(mesh.points.astype(np.float32)[:, 0:2]).type(dtype)
+        nodes = torch.tensor(points[:, 0:2], dtype=dtype, device=device)
         return Planar(nodes, elements, material, thickness=thickness)
+
+
+def import_shell(
+    filename: PathLike, material: Material, thickness: float = 1.0
+) -> Shell:
+    """Import a mesh as a `Shell`. Raises `TypeError` for other mesh types."""
+    mesh = import_mesh(filename, material, thickness)
+    if not isinstance(mesh, Shell):
+        raise TypeError(f"{filename} is not a shell mesh, but {type(mesh).__name__}.")
+    return mesh
+
+
+def import_planar(
+    filename: PathLike, material: Material, thickness: float = 1.0
+) -> Planar:
+    """Import a mesh as `Planar`. Raises `TypeError` for other mesh types."""
+    mesh = import_mesh(filename, material, thickness)
+    if not isinstance(mesh, Planar):
+        raise TypeError(f"{filename} is not a planar mesh, but {type(mesh).__name__}.")
+    return mesh
+
+
+def import_solid(filename: PathLike, material: Material) -> Solid:
+    """Import a mesh as a `Solid`. Raises `TypeError` for other mesh types."""
+    mesh = import_mesh(filename, material)
+    if not isinstance(mesh, Solid):
+        raise TypeError(f"{filename} is not a solid mesh, but {type(mesh).__name__}.")
+    return mesh

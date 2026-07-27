@@ -4,12 +4,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "torch-fem"
-version = "0.4.5"
+version = "0.7.4"
 authors = [{ name = "Nils Meyer", email = "nils.meyer@uni-a.de" }]
-description = "GPU accelerated differential finite elements for solid mechanics with PyTorch."
+description = "GPU accelerated differentiable finite elements for solid mechanics with PyTorch."
 readme = "README.md"
 license = {file = "LICENSE"}
-keywords = ["finite elements", "automatic differentiation"]
+keywords = [
+    "finite elements",
+    "automatic differentiation",
+    "scientific computing",
+    "differentiable programming",
+    "solid mechanics",
+    "differentiable physics",
+    "sensitivity analysis",
+    "topology optimization",
+    "shape optimization",
+    "inverse problems",
+]
 requires-python = ">=3.10"
 classifiers = [
     'Programming Language :: Python',
@@ -18,22 +29,39 @@ classifiers = [
     'Programming Language :: Python :: 3.11',
     'Programming Language :: Python :: 3.12',
     'Programming Language :: Python :: 3.13',
+    'Programming Language :: Python :: 3.14',
 ]
 dependencies = [
-    "ipywidgets",
-    "ipykernel",
     "matplotlib",
-    "memory_profiler",
     "meshio",
+    "numpy",
     "pyamg",
     "pyvista",
-    "scipy~=1.15.0",
-    "tqdm",
-    "torch",
-    "trame",
-    "trame-vuetify",
-    "trame-vtk",
+    "scipy>=1.14",
+    "torch>=2.0",
+]
+
+[project.optional-dependencies]
+notebook = [
     "imageio",
+    "ipykernel",
+    "ipywidgets",
+    "tqdm",
+    "trame",
+    "trame-vtk",
+    "trame-vuetify",
+]
+dev = [
+    "basedpyright",
+    "black",
+    "flake8",
+    "isort",
+    "pytest",
+    "testbook",
+]
+all = [
+    "torch-fem[notebook]",
+    "torch-fem[dev]",
 ]
 
 [project.urls]
@@ -47,3 +75,20 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 torchfem = ["data/*.*"]
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.pyright]
+pythonVersion = "3.10"
+include = ["src/torchfem"]
+typeCheckingMode = "basic"
+reportMissingImports = false
+
+[tool.pytest.ini_options]
+markers = [
+    "notebook: executes an example notebook (slow)",
+]
