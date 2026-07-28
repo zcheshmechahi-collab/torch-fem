@@ -223,14 +223,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         G_fc=None,
         G_mt=None,
         G_mc=None,
-        # viscous (Duvaut-Lions) regularization, shared by all four modes
-        eta=None,
-        # pseudo-time step for damage update
-        dt_damage=1.0,
     ):
-        self.eta = float(eta) if eta is not None else 0.0
-        self.dt_damage = float(dt_damage)
-
         super().__init__(
             E_1=E1,
             E_2=E2,
@@ -297,8 +290,6 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
             G_fc=broadcast(self.G_fc),
             G_mt=broadcast(self.G_mt),
             G_mc=broadcast(self.G_mc),
-            eta=self.eta,
-            dt_damage=self.dt_damage,
         )
 
         mat.is_vectorized = True
@@ -334,10 +325,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
 
         sigma_hat = torch.einsum("...ijkl,...kl->...ij", self.C, eps_new - de0)
 
-        # Single viscous (Duvaut-Lions) update factor shared by all four modes.
-        alpha = self.dt_damage / (self.eta + self.dt_damage)
-
-        # Per-mode Hashin initiation + linear softening + Duvaut-Lions update.
+        # Per-mode Hashin initiation + linear softening (rate-independent).
         # Each mode: (kind, tension, strength, axial modulus, fracture energy,
         # previous delta_max, previous damage).
         modes = [
@@ -346,7 +334,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
             ("matrix", True, self.Yt, self.E_2, self.G_mt, delta_mt_max, d_mt_prev),
             ("matrix", False, self.Yc, self.E_2, self.G_mc, delta_mc_max, d_mc_prev),
         ]
-        out = [self.damage_update(m, sigma_hat, eps_new, cl, alpha) for m in modes]
+        out = [self.damage_update(m, sigma_hat, eps_new, cl) for m in modes]
         (f_ft, delta_ft, delta_ft_max_new, delta_0_ft, d_ft_new) = out[0]
         (f_fc, delta_fc, delta_fc_max_new, delta_0_fc, d_fc_new) = out[1]
         (f_mt, delta_mt, delta_mt_max_new, delta_0_mt, d_mt_new) = out[2]
@@ -443,7 +431,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
             bc(1.0 - st2p) * Sig_dm + bc(omft * omfc * ommt) * Ss + bc(ommt) * Sig_ds23
         )
 
-        # d(d_k)/d(eps) = alpha * d(damage_law)/d(delta) * d(delta_eq)/d(eps),
+        # d(d_k)/d(eps) = d(damage_law)/d(delta) * d(delta_eq)/d(eps),
         # gated to the active + loading + unclamped regime.
         def dmg_factor(
             delta_cur, delta_prev, delta_max_new, delta_0, f, strength, Gp, d_new
@@ -454,7 +442,7 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
             mask = (
                 active & (delta_cur >= delta_prev) & (d_new > 0.0) & (d_new < 0.99)
             ).to(dtype)
-            return alpha * dl * mask
+            return dl * mask
 
         cf_ft = dmg_factor(
             delta_ft,
@@ -518,13 +506,20 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
             gd_mc[..., a, b] = cl2 * 2.0 * eps_new[..., a, b] / Dmc
             gd_mc[..., b, a] = gd_mc[..., a, b]
 
-        ddsdde = (
-            C_d
-            + torch.einsum("...ij,...kl->...ijkl", T_ft, bc(cf_ft) * gd_ft)
-            + torch.einsum("...ij,...kl->...ijkl", T_fc, bc(cf_fc) * gd_fc)
-            + torch.einsum("...ij,...kl->...ijkl", T_mt, bc(cf_mt) * gd_mt)
-            + torch.einsum("...ij,...kl->...ijkl", T_mc, bc(cf_mc) * gd_mc)
-        )
+        # Secant tangent (C_d, positive definite) on the first Newton iteration
+        # for robustness, then the consistent softening tangent afterwards. The
+        # softening term makes C_alg indefinite, so using it on iteration 0 makes
+        # the first step overshoot at sharp localization; this mirrors the
+        # `if iter > 0` guard in IsotropicDamage3D.
+        ddsdde = C_d
+        if iter > 0:
+            ddsdde = (
+                ddsdde
+                + torch.einsum("...ij,...kl->...ijkl", T_ft, bc(cf_ft) * gd_ft)
+                + torch.einsum("...ij,...kl->...ijkl", T_fc, bc(cf_fc) * gd_fc)
+                + torch.einsum("...ij,...kl->...ijkl", T_mt, bc(cf_mt) * gd_mt)
+                + torch.einsum("...ij,...kl->...ijkl", T_mc, bc(cf_mc) * gd_mc)
+            )
 
         return sigma_new, state_new, ddsdde
 
@@ -532,12 +527,13 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
     # Per-mode damage update (Hashin initiation + linear softening)
     # ============================================================
 
-    def damage_update(self, spec, sigma_hat, eps, cl, alpha):
+    def damage_update(self, spec, sigma_hat, eps, cl):
         """Failure index, equivalent displacement and updated damage for one mode.
 
         `spec` is ``(kind, tension, strength, modulus, G, delta_max, d_prev)``:
         `kind` selects the fiber/matrix criteria, `tension` the tensile/compressive
-        branch. Returns ``(f, delta, delta_max_new, delta_0, d_new)``.
+        branch. Damage is rate-independent and monotonic (irreversible).
+        Returns ``(f, delta, delta_max_new, delta_0, d_new)``.
         """
         kind, tension, strength, modulus, G, delta_max, d_prev = spec
 
@@ -551,10 +547,10 @@ class AnisotropicDamage3D(OrthotropicElasticity3D):
         delta_max_new = torch.maximum(delta_max, delta)
         delta_0 = cl * strength / modulus
 
-        d_target = torch.maximum(
+        d_new = torch.maximum(
             d_prev, self.damage_law(delta_max_new, delta_0, f, strength, G)
         )
-        d_new = torch.clamp(d_prev + alpha * (d_target - d_prev), 0.0, 0.99)
+        d_new = torch.clamp(d_new, 0.0, 0.99)
         return f, delta, delta_max_new, delta_0, d_new
 
     # ============================================================
